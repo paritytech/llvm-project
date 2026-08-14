@@ -1024,6 +1024,26 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
 
   switch (Opcode) {
   case ISD::Constant: {
+    if (VT == MVT::i256) {
+      // Build XLen-sized values in a register instead of a 32-byte pool entry
+      // plus its load. Done here rather than in lowering because a ZERO_EXTEND
+      // of a constant folds back into one; wider values became a pool load
+      // during legalization and never reach this point.
+      const APInt &Value = Node->getAsAPIntVal();
+      bool IsSigned = Value.getActiveBits() > 64;
+      assert((!IsSigned || Value.getSignificantBits() <= 64) &&
+             "Wide constant should have been pooled");
+
+      SDValue Materialised =
+          selectImm(CurDAG, DL, XLenVT,
+                    IsSigned ? Value.getSExtValue() : Value.getZExtValue(),
+                    *Subtarget);
+      ReplaceNode(Node, CurDAG->getMachineNode(
+                            IsSigned ? RISCV::REVIVE_W_SEXT
+                                     : RISCV::REVIVE_W_ZEXT,
+                            DL, MVT::i256, Materialised));
+      return;
+    }
     assert(VT == Subtarget->getXLenVT() && "Unexpected VT");
     auto *ConstNode = cast<ConstantSDNode>(Node);
     if (ConstNode->isZero()) {
@@ -3608,6 +3628,11 @@ bool RISCVDAGToDAGISel::selectSETCC(SDValue N, ISD::CondCode ExpectedCCVal,
   SDValue RHS = N->getOperand(1);
 
   if (!LHS.getValueType().isScalarInteger())
+    return false;
+
+  // This rewrites the compare into XLen arithmetic on the operands, so it must
+  // not fire for i256, which is scalar and legal but lives in VRM2.
+  if (LHS.getValueType() != Subtarget->getXLenVT())
     return false;
 
   // If the RHS side is 0, we don't need any extra instructions, return the LHS.
