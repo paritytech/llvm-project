@@ -22,12 +22,7 @@ define i256 @select_i256(i256 %a, i256 %b, i64 %c) {
 define i256 @select_wide_cond(i256 %a, i256 %b) {
 ; CHECK-LABEL: select_wide_cond:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wsltu a0, v8, v10
-; CHECK-NEXT:    bnez a0, .LBB1_2
-; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; CHECK-NEXT:    vmv2r.v v8, v10
-; CHECK-NEXT:  .LBB1_2:
+; CHECK-NEXT:    revive.wminu v8, v8, v10
 ; CHECK-NEXT:    ret
   %t = icmp ult i256 %a, %b
   %r = select i1 %t, i256 %a, i256 %b

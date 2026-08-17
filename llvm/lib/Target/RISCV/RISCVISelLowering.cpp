@@ -69,6 +69,12 @@ static cl::opt<bool>
                               "VWADD_W) with splat constants"),
                      cl::init(false));
 
+// The widths XReviveVec keeps in a vector register: i256 on VRM2, i512 on VRM4,
+// i1024 on VRM8.
+static bool isReviveWideVT(EVT VT) {
+  return VT == MVT::i256 || VT == MVT::i512 || VT == MVT::i1024;
+}
+
 static cl::opt<unsigned> NumRepeatedDivisors(
     DEBUG_TYPE "-fp-repeated-divisors", cl::Hidden,
     cl::desc("Set the minimum number of repetitions of a divisor to allow "
@@ -157,8 +163,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
 
   // With a register class, type legalization stops expanding i256 into i64
   // limbs and the operations below select as single instructions.
-  if (Subtarget.hasVendorXReviveVec())
+  if (Subtarget.hasVendorXReviveVec()) {
     addRegisterClass(MVT::i256, &RISCV::VRM2RegClass);
+    addRegisterClass(MVT::i512, &RISCV::VRM4RegClass);
+    addRegisterClass(MVT::i1024, &RISCV::VRM8RegClass);
+  }
 
   static const MVT::SimpleValueType BoolVecVTs[] = {
       MVT::nxv1i1,  MVT::nxv2i1,  MVT::nxv4i1, MVT::nxv8i1,
@@ -320,37 +329,39 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::DYNAMIC_STACKALLOC, XLenVT, Custom);
 
   if (Subtarget.hasVendorXReviveVec()) {
+   for (MVT WideVT : {MVT::i256, MVT::i512, MVT::i1024}) {
     // One instruction each; see RISCVInstrInfoXReviveVec.td.
     setOperationAction({ISD::ADD, ISD::SUB, ISD::MUL, ISD::AND, ISD::OR,
                         ISD::XOR, ISD::SHL, ISD::SRL, ISD::SRA, ISD::UDIV,
                         ISD::SDIV, ISD::UREM, ISD::SREM, ISD::SETCC,
                         ISD::LOAD, ISD::STORE, ISD::ZERO_EXTEND,
-                        ISD::SIGN_EXTEND, ISD::ANY_EXTEND, ISD::BSWAP},
-                       MVT::i256, Legal);
+                        ISD::SIGN_EXTEND, ISD::ANY_EXTEND, ISD::BSWAP,
+                        ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX},
+                       WideVT, Legal);
 
     // Only four compares have instructions; the rest are reached by swapping
     // operands or inverting, which Expand makes the legalizer do.
     setCondCodeAction({ISD::SETLE, ISD::SETULE, ISD::SETGE, ISD::SETUGE},
-                      MVT::i256, Expand);
+                      WideVT, Expand);
 
     // A 256-bit immediate has no encoding, so constants are materialised from
     // the constant pool; selects need control flow, as they do for XLenVT.
     setOperationAction({ISD::Constant, ISD::SELECT, ISD::SIGN_EXTEND_INREG},
-                       MVT::i256, Custom);
+                       WideVT, Custom);
 
     // Expand the rest explicitly, so an unhandled node cannot reach ISel.
     // Only the full-width access has an instruction; narrower ones become a
     // truncate or extend feeding an XLen access.
     // i128 is not legal, so the generic truncating-store expansion has nothing
     // to truncate to; lowered by hand as two limb stores.
-    setTruncStoreAction(MVT::i256, MVT::i128, Custom);
-    setLoadExtAction({ISD::EXTLOAD, ISD::SEXTLOAD, ISD::ZEXTLOAD}, MVT::i256,
+    setTruncStoreAction(WideVT, MVT::i128, Custom);
+    setLoadExtAction({ISD::EXTLOAD, ISD::SEXTLOAD, ISD::ZEXTLOAD}, WideVT,
                      MVT::i128, Custom);
 
     for (MVT Narrow : {MVT::i8, MVT::i16, MVT::i32, MVT::i64}) {
-      setTruncStoreAction(MVT::i256, Narrow, Expand);
+      setTruncStoreAction(WideVT, Narrow, Expand);
       // EXTLOAD is left alone: LegalizeDAG asserts it is always supported.
-      setLoadExtAction({ISD::SEXTLOAD, ISD::ZEXTLOAD}, MVT::i256, Narrow,
+      setLoadExtAction({ISD::SEXTLOAD, ISD::ZEXTLOAD}, WideVT, Narrow,
                        Expand);
     }
 
@@ -362,11 +373,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
                         ISD::SMULO, ISD::UMULO, ISD::UADDO_CARRY,
                         ISD::USUBO_CARRY,
                         ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ_ZERO_UNDEF,
-                        ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX,
                         ISD::ABS, ISD::SADDSAT, ISD::UADDSAT, ISD::SSUBSAT,
                         ISD::USUBSAT},
-                       MVT::i256, Expand);
+                       WideVT, Expand);
   }
+   }
 
   setOperationAction(ISD::BR_JT, MVT::Other, Expand);
   setOperationAction(ISD::BR_CC, XLenVT, Expand);
@@ -1913,7 +1924,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   // div/rem are one instruction at 256 bits, so ExpandIRInsts must not rewrite
   // them into a libcall before the selector sees them.
   if (Subtarget.hasVendorXReviveVec())
-    setMaxDivRemBitWidthSupported(256);
+    setMaxDivRemBitWidthSupported(1024);
   else
     setMaxDivRemBitWidthSupported(Subtarget.is64Bit() ? 128 : 64);
 
@@ -2465,7 +2476,7 @@ bool RISCVTargetLowering::signExtendConstant(const ConstantInt *CI) const {
 // it just created, which does not terminate.
 bool RISCVTargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                                            const MachineFunction &MF) const {
-  return MemVT != MVT::i256;
+  return !isReviveWideVT(MemVT);
 }
 
 bool RISCVTargetLowering::isCheapToSpeculateCttz(Type *Ty) const {
@@ -7163,7 +7174,7 @@ static SDValue lowerWideConstant(SDValue Op, SelectionDAG &DAG,
 
 static SDValue lowerConstant(SDValue Op, SelectionDAG &DAG,
                              const RISCVSubtarget &Subtarget) {
-  if (Op.getValueType() == MVT::i256)
+  if (isReviveWideVT(Op.getValueType()))
     return lowerWideConstant(Op, DAG, Subtarget);
 
   assert(Op.getValueType() == MVT::i64 && "Unexpected VT");
@@ -7890,7 +7901,7 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     // Sign-extending a narrow field of a wide value. Do it in an XLen register,
     // where the target already has the instructions, and widen the result.
     EVT ExtVT = cast<VTSDNode>(Op.getOperand(1))->getVT();
-    assert(Op.getValueType() == MVT::i256 &&
+    assert(isReviveWideVT(Op.getValueType()) &&
            ExtVT.getSizeInBits() <= Subtarget.getXLen() &&
            "Unexpected sign_extend_inreg");
     SDLoc DL(Op);
@@ -7898,7 +7909,7 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     SDValue Narrow = DAG.getNode(ISD::TRUNCATE, DL, XLenVT, Op.getOperand(0));
     SDValue Signed = DAG.getNode(ISD::SIGN_EXTEND_INREG, DL, XLenVT, Narrow,
                                  Op.getOperand(1));
-    return DAG.getNode(RISCVISD::WIDE_SEXT, DL, MVT::i256, Signed);
+    return DAG.getNode(RISCVISD::WIDE_SEXT, DL, Op.getValueType(), Signed);
   }
   case ISD::BRCOND:
     return lowerBRCOND(Op, DAG);
@@ -9890,7 +9901,7 @@ SDValue RISCVTargetLowering::lowerSELECT(SDValue Op, SelectionDAG &DAG) const {
 
   // The rewrites below fold operands into XLen arithmetic, Zicond or bit
   // tricks, all assuming a GPR. Go straight to the conditional-branch pseudo.
-  if (VT == MVT::i256) {
+  if (isReviveWideVT(VT)) {
     SDValue Ops[] = {CondV, DAG.getConstant(0, DL, XLenVT),
                      DAG.getCondCode(ISD::SETNE), TrueV, FalseV};
     return DAG.getNode(RISCVISD::SELECT_CC, DL, VT, Ops);
