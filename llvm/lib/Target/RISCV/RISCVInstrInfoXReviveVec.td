@@ -155,6 +155,33 @@ multiclass RVRevivePats<string W, ValueType vt, RegisterClass rc> {
   def : Pat<(vt (umax (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_MAXU") (vt rc:$a), (vt rc:$b))>;
   def : Pat<(vt (smax (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_MAX")  (vt rc:$a), (vt rc:$b))>;
   def : Pat<(vt (bswap (vt rc:$a))), (!cast<Instruction>("REVIVE"#W#"_BSWAP") (vt rc:$a))>;
+  // Widened operands and a truncated result mean the wide instruction is doing
+  // XLen work. Low bits depend only on low bits here, so the scalar one is
+  // equivalent.
+  foreach p = [["add", "ADD"], ["sub", "SUB"],
+               ["and", "AND"], ["or", "OR"], ["xor", "XOR"]] in {
+    def : Pat<(XLenVT (trunc (vt (!cast<SDPatternOperator>(p[0])
+                                    (vt (zext (XLenVT GPR:$a))),
+                                    (vt (zext (XLenVT GPR:$b))))))),
+              (!cast<Instruction>(p[1]) GPR:$a, GPR:$b)>;
+    def : Pat<(XLenVT (trunc (vt (!cast<SDPatternOperator>(p[0])
+                                    (vt (riscv_wide_zext (XLenVT GPR:$a))),
+                                    (vt (riscv_wide_zext (XLenVT GPR:$b))))))),
+              (!cast<Instruction>(p[1]) GPR:$a, GPR:$b)>;
+    // The combiner weakens the extends to anyext when only low bits are
+    // demanded, so that form needs matching too.
+    def : Pat<(XLenVT (trunc (vt (!cast<SDPatternOperator>(p[0])
+                                    (vt (anyext (XLenVT GPR:$a))),
+                                    (vt (anyext (XLenVT GPR:$b))))))),
+              (!cast<Instruction>(p[1]) GPR:$a, GPR:$b)>;
+  }
+
+  // Zero extension preserves unsigned order, so the compare narrows too.
+  def : Pat<(XLenVT (setcc (vt (zext (XLenVT GPR:$a))), (vt (zext (XLenVT GPR:$b))), SETULT)),
+            (SLTU GPR:$a, GPR:$b)>;
+  def : Pat<(XLenVT (setcc (vt (zext (XLenVT GPR:$a))), (vt (zext (XLenVT GPR:$b))), SETUGT)),
+            (SLTU GPR:$b, GPR:$a)>;
+
   def : Pat<(vt (riscv_wide_zext (XLenVT GPR:$a))), (!cast<Instruction>("REVIVE"#W#"_ZEXT") GPR:$a)>;
   def : Pat<(vt (riscv_wide_sext (XLenVT GPR:$a))), (!cast<Instruction>("REVIVE"#W#"_SEXT") GPR:$a)>;
 
@@ -187,6 +214,21 @@ multiclass RVRevivePats<string W, ValueType vt, RegisterClass rc> {
             (!cast<Instruction>("REVIVE"#W#"_LD") GPR:$rs1, simm12_lo:$imm12)>;
   def : Pat<(store (vt rc:$rs2), (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12)),
             (!cast<Instruction>("REVIVE"#W#"_ST") (vt rc:$rs2), GPR:$rs1, simm12_lo:$imm12)>;
+}
+
+// Narrowing multiply, kept apart because scalar MUL needs the multiply
+// extension; without it the wide instruction stays.
+multiclass RVReviveMulPats<ValueType vt> {
+  foreach ext = [zext, riscv_wide_zext, anyext] in
+    def : Pat<(XLenVT (trunc (vt (mul (vt (ext (XLenVT GPR:$a))),
+                                      (vt (ext (XLenVT GPR:$b))))))),
+              (MUL GPR:$a, GPR:$b)>;
+}
+
+let Predicates = [HasVendorXReviveVec, HasStdExtZmmul] in {
+defm : RVReviveMulPats<i256>;
+defm : RVReviveMulPats<i512>;
+defm : RVReviveMulPats<i1024>;
 }
 
 let Predicates = [HasVendorXReviveVec] in {
@@ -253,5 +295,8 @@ def : Pat<(i256 (trunc (i1024 VRM8:$rs1))),
 
 // The same conditional-branch triangle as the scalar select; there is no wide
 // conditional move to fold into.
-let Predicates = [HasVendorXReviveVec] in
+let Predicates = [HasVendorXReviveVec] in {
 defm Select_VRM2 : SelectCC_GPR_rrirr<VRM2, i256>;
+defm Select_VRM4 : SelectCC_GPR_rrirr<VRM4, i512>;
+defm Select_VRM8 : SelectCC_GPR_rrirr<VRM8, i1024>;
+}

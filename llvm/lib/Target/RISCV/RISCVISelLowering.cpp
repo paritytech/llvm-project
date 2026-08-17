@@ -23646,6 +23646,8 @@ RISCVTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RISCV::Select_FPR64_Using_CC_GPR:
   case RISCV::Select_FPR64INX_Using_CC_GPR:
   case RISCV::Select_VRM2_Using_CC_GPR:
+  case RISCV::Select_VRM4_Using_CC_GPR:
+  case RISCV::Select_VRM8_Using_CC_GPR:
   case RISCV::Select_FPR64IN32X_Using_CC_GPR:
     return emitSelectPseudo(MI, BB, Subtarget);
   case RISCV::BuildPairF64Pseudo:

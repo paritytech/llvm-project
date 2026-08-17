@@ -210,14 +210,22 @@ RISCVTargetMachine::getSubtargetImpl(const Function &F) const {
       RVVBitsMax = *VScaleMax * RISCV::RVVBitsPerBlock;
   }
 
-  // XReviveVec is defined at VLEN=128, where an LMUL=2 pair is exactly 256 bits. Both bounds are
-  // pinned: Zvl128b only sets a floor, and a known width is what makes spill slots fixed-size.
+  // XReviveVec is defined at VLEN=128, where an LMUL=2 pair is exactly 256 bits. Zvl128b only sets
+  // a floor, so both bounds are pinned; a known width is also what makes spill slots fixed-size.
+  // Checking the resolved bounds rather than the command line catches a vscale_range attribute
+  // too. 0 and -1U mean "unset" and are pinned; any other width would silently change what the
+  // register classes hold, so it is rejected.
   if (FS.find("+xrevivevec") != std::string::npos ||
       TargetFS.find("+xrevivevec") != std::string::npos) {
-    if (!RVVVectorBitsMinOpt.getNumOccurrences())
-      RVVBitsMin = 128;
-    if (!RVVVectorBitsMaxOpt.getNumOccurrences())
-      RVVBitsMax = 128;
+    const unsigned ReviveVLen = 128;
+    for (auto [Bits, Name] : {std::pair(&RVVBitsMin, "minimum"),
+                              std::pair(&RVVBitsMax, "maximum")}) {
+      if (*Bits == 0 || *Bits == -1U)
+        *Bits = ReviveVLen;
+      else if (*Bits != ReviveVLen)
+        reportFatalUsageError(Twine("XReviveVec requires VLEN=128, but the vector length ") +
+                              Name + " is " + Twine(*Bits));
+    }
   }
 
   if (RVVBitsMin != -1U) {
