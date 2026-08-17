@@ -210,6 +210,16 @@ RISCVTargetMachine::getSubtargetImpl(const Function &F) const {
       RVVBitsMax = *VScaleMax * RISCV::RVVBitsPerBlock;
   }
 
+  // XReviveVec is defined at VLEN=128, where an LMUL=2 pair is exactly 256 bits. Both bounds are
+  // pinned: Zvl128b only sets a floor, and a known width is what makes spill slots fixed-size.
+  if (FS.find("+xrevivevec") != std::string::npos ||
+      TargetFS.find("+xrevivevec") != std::string::npos) {
+    if (!RVVVectorBitsMinOpt.getNumOccurrences())
+      RVVBitsMin = 128;
+    if (!RVVVectorBitsMaxOpt.getNumOccurrences())
+      RVVBitsMax = 128;
+  }
+
   if (RVVBitsMin != -1U) {
     // FIXME: Change to >= 32 when VLEN = 32 is supported.
     assert((RVVBitsMin == 0 || (RVVBitsMin >= 64 && RVVBitsMin <= 65536 &&

@@ -63,135 +63,69 @@ join:
 define i256 @spill_wide(ptr %p) {
 ; CHECK-LABEL: spill_wide:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi sp, sp, -48
-; CHECK-NEXT:    .cfi_def_cfa_offset 48
-; CHECK-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    addi sp, sp, -304
+; CHECK-NEXT:    .cfi_def_cfa_offset 304
+; CHECK-NEXT:    sd ra, 296(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    li a2, 18
-; CHECK-NEXT:    mul a1, a1, a2
-; CHECK-NEXT:    sub sp, sp, a1
-; CHECK-NEXT:    .cfi_escape 0x0f, 0x0d, 0x72, 0x00, 0x11, 0x30, 0x22, 0x11, 0x12, 0x92, 0xa2, 0x38, 0x00, 0x1e, 0x22 # sp + 48 + 18 * vlenb
 ; CHECK-NEXT:    revive.wld v8, 0(a0)
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    slli a1, a1, 4
-; CHECK-NEXT:    add a1, sp, a1
-; CHECK-NEXT:    addi a1, a1, 32
-; CHECK-NEXT:    vs2r.v v10, (a1) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a1, sp, 264
+; CHECK-NEXT:    vs2r.v v10, (a1) # 32-byte Folded Spill
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    li a2, 14
-; CHECK-NEXT:    mul a1, a1, a2
-; CHECK-NEXT:    add a1, sp, a1
-; CHECK-NEXT:    addi a1, a1, 32
-; CHECK-NEXT:    vs2r.v v10, (a1) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a1, sp, 232
+; CHECK-NEXT:    vs2r.v v10, (a1) # 32-byte Folded Spill
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    li a2, 12
-; CHECK-NEXT:    mul a1, a1, a2
-; CHECK-NEXT:    add a1, sp, a1
-; CHECK-NEXT:    addi a1, a1, 32
-; CHECK-NEXT:    vs2r.v v10, (a1) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a1, sp, 200
+; CHECK-NEXT:    vs2r.v v10, (a1) # 32-byte Folded Spill
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    li a2, 10
-; CHECK-NEXT:    mul a1, a1, a2
-; CHECK-NEXT:    add a1, sp, a1
-; CHECK-NEXT:    addi a1, a1, 32
-; CHECK-NEXT:    vs2r.v v10, (a1) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a1, sp, 168
+; CHECK-NEXT:    vs2r.v v10, (a1) # 32-byte Folded Spill
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    slli a1, a1, 3
-; CHECK-NEXT:    add a1, sp, a1
-; CHECK-NEXT:    addi a1, a1, 32
-; CHECK-NEXT:    vs2r.v v10, (a1) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a1, sp, 136
+; CHECK-NEXT:    vs2r.v v10, (a1) # 32-byte Folded Spill
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    li a2, 6
-; CHECK-NEXT:    mul a1, a1, a2
-; CHECK-NEXT:    add a1, sp, a1
-; CHECK-NEXT:    addi a1, a1, 32
-; CHECK-NEXT:    vs2r.v v10, (a1) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a1, sp, 104
+; CHECK-NEXT:    vs2r.v v10, (a1) # 32-byte Folded Spill
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    slli a1, a1, 2
-; CHECK-NEXT:    add a1, sp, a1
-; CHECK-NEXT:    addi a1, a1, 32
-; CHECK-NEXT:    vs2r.v v10, (a1) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a1, sp, 72
+; CHECK-NEXT:    vs2r.v v10, (a1) # 32-byte Folded Spill
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    csrr a1, vlenb
-; CHECK-NEXT:    slli a1, a1, 1
-; CHECK-NEXT:    add a1, sp, a1
-; CHECK-NEXT:    addi a1, a1, 32
-; CHECK-NEXT:    vs2r.v v10, (a1) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a1, sp, 40
+; CHECK-NEXT:    vs2r.v v10, (a1) # 32-byte Folded Spill
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
-; CHECK-NEXT:    addi a0, sp, 32
-; CHECK-NEXT:    vs2r.v v10, (a0) # vscale x 16-byte Folded Spill
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    vs2r.v v10, (a0) # 32-byte Folded Spill
 ; CHECK-NEXT:    call sink1
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    slli a0, a0, 4
-; CHECK-NEXT:    add a0, sp, a0
-; CHECK-NEXT:    addi a0, a0, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 264
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    li a1, 14
-; CHECK-NEXT:    mul a0, a0, a1
-; CHECK-NEXT:    add a0, sp, a0
-; CHECK-NEXT:    addi a0, a0, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 232
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    li a1, 12
-; CHECK-NEXT:    mul a0, a0, a1
-; CHECK-NEXT:    add a0, sp, a0
-; CHECK-NEXT:    addi a0, a0, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 200
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    li a1, 10
-; CHECK-NEXT:    mul a0, a0, a1
-; CHECK-NEXT:    add a0, sp, a0
-; CHECK-NEXT:    addi a0, a0, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 168
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    slli a0, a0, 3
-; CHECK-NEXT:    add a0, sp, a0
-; CHECK-NEXT:    addi a0, a0, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 136
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    li a1, 6
-; CHECK-NEXT:    mul a0, a0, a1
-; CHECK-NEXT:    add a0, sp, a0
-; CHECK-NEXT:    addi a0, a0, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 104
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    slli a0, a0, 2
-; CHECK-NEXT:    add a0, sp, a0
-; CHECK-NEXT:    addi a0, a0, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 72
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    slli a0, a0, 1
-; CHECK-NEXT:    add a0, sp, a0
-; CHECK-NEXT:    addi a0, a0, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 40
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    addi a0, sp, 32
-; CHECK-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
-; CHECK-NEXT:    csrr a0, vlenb
-; CHECK-NEXT:    li a1, 18
-; CHECK-NEXT:    mul a0, a0, a1
-; CHECK-NEXT:    add sp, sp, a0
-; CHECK-NEXT:    .cfi_def_cfa sp, 48
-; CHECK-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld ra, 296(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
-; CHECK-NEXT:    addi sp, sp, 48
+; CHECK-NEXT:    addi sp, sp, 304
 ; CHECK-NEXT:    .cfi_def_cfa_offset 0
 ; CHECK-NEXT:    ret
   %v0 = load volatile i256, ptr %p

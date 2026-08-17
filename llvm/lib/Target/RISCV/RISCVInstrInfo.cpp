@@ -644,6 +644,23 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   llvm_unreachable("Impossible reg-to-reg copy");
 }
 
+// RVV spill slots are scalable because VLEN is normally unknown. When it is known exactly the slot
+// is a fixed number of bytes, addressable at an immediate offset instead of through vlenb.
+static bool useFixedRVVSlot(MachineFrameInfo &MFI, int FI,
+                            const TargetRegisterClass *RC,
+                            const RISCVSubtarget &STI,
+                            const RISCVRegisterInfo &RegInfo) {
+  if (!STI.hasVendorXReviveVec())
+    return false;
+  std::optional<unsigned> VLen = STI.getRealVLen();
+  if (!VLen)
+    return false;
+  // The class size is the minimum, at VLEN = RVVBitsPerBlock; scale to the real width.
+  uint64_t Bits = RegInfo.getRegSizeInBits(*RC).getKnownMinValue();
+  MFI.setObjectSize(FI, Bits / 8 * (*VLen / RISCV::RVVBitsPerBlock));
+  return true;
+}
+
 void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator I,
                                          Register SrcReg, bool IsKill, int FI,
@@ -709,11 +726,15 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
     llvm_unreachable("Can't store this register to stack slot");
 
   if (RISCVRegisterInfo::isRVVRegClass(RC)) {
+    bool Fixed = useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
     MachineMemOperand *MMO = MF->getMachineMemOperand(
         MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
-        TypeSize::getScalable(MFI.getObjectSize(FI)), Alignment);
+        Fixed ? TypeSize::getFixed(MFI.getObjectSize(FI))
+              : TypeSize::getScalable(MFI.getObjectSize(FI)),
+        Alignment);
 
-    MFI.setStackID(FI, TargetStackID::ScalableVector);
+    if (!Fixed)
+      MFI.setStackID(FI, TargetStackID::ScalableVector);
     BuildMI(MBB, I, DebugLoc(), get(Opcode))
         .addReg(SrcReg, getKillRegState(IsKill))
         .addFrameIndex(FI)
@@ -801,11 +822,15 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     llvm_unreachable("Can't load this register from stack slot");
 
   if (RISCVRegisterInfo::isRVVRegClass(RC)) {
+    bool Fixed = useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
     MachineMemOperand *MMO = MF->getMachineMemOperand(
         MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
-        TypeSize::getScalable(MFI.getObjectSize(FI)), Alignment);
+        Fixed ? TypeSize::getFixed(MFI.getObjectSize(FI))
+              : TypeSize::getScalable(MFI.getObjectSize(FI)),
+        Alignment);
 
-    MFI.setStackID(FI, TargetStackID::ScalableVector);
+    if (!Fixed)
+      MFI.setStackID(FI, TargetStackID::ScalableVector);
     BuildMI(MBB, I, DL, get(Opcode), DstReg)
         .addFrameIndex(FI)
         .addMemOperand(MMO)
