@@ -1813,6 +1813,25 @@ void RISCVFrameLowering::processFunctionBeforeFrameFinalized(
   const TargetRegisterClass *RC = &RISCV::GPRRegClass;
   auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
 
+  // Objects made for scalable types are sized for the shortest vector length the target
+  // allows and tagged with the scalable stack ID, because that is all instruction
+  // selection knows. The spill code restates its own slots as it builds them, but an
+  // alloca of a scalable type or a stack temporary out of instruction selection is only
+  // identifiable by the tag. With the length exactly known, restate each tagged object
+  // as the ordinary object it is, before the scalable region below is laid out, so
+  // nothing keeps a size that was meant to be scaled at run time.
+  if (auto VLen = MF.getSubtarget<RISCVSubtarget>().getRealVLenIfAny()) {
+    uint64_t VScale = *VLen / RISCV::RVVBitsPerBlock;
+    for (int FI = MFI.getObjectIndexBegin(), End = MFI.getObjectIndexEnd();
+         FI != End; ++FI) {
+      if (MFI.getStackID(FI) != TargetStackID::ScalableVector ||
+          MFI.isDeadObjectIndex(FI))
+        continue;
+      MFI.setObjectSize(FI, MFI.getObjectSize(FI) * VScale);
+      MFI.setStackID(FI, TargetStackID::Default);
+    }
+  }
+
   int64_t RVVStackSize;
   Align RVVStackAlign;
   std::tie(RVVStackSize, RVVStackAlign) = assignRVVStackObjectOffsets(MF);
@@ -2420,12 +2439,13 @@ bool RISCVFrameLowering::isSupportedStackID(TargetStackID::Value ID) const {
 }
 
 TargetStackID::Value RISCVFrameLowering::getStackIDForScalableVectors() const {
-  // A vector object only needs a region of its own because its size is a runtime
-  // quantity. Where the vector length is exactly known it is not, so the object goes in
-  // the ordinary part of the frame and its offset is a constant like any other.
-  if (STI.getRealVLenIfAny())
-    return TargetStackID::Default;
-
+  // This answers ScalableVector even when the vector length is exactly known and the
+  // object will end its life as an ordinary stack object. The creators that consult this
+  // hook size their objects for the shortest vector length the target allows, and the
+  // stack ID is the only thing that records that the size still wants scaling; dropping
+  // the tag at creation would leave an undersized object indistinguishable from a real
+  // fixed one. processFunctionBeforeFrameFinalized restates every tagged object once the
+  // frame is laid out.
   return TargetStackID::ScalableVector;
 }
 
