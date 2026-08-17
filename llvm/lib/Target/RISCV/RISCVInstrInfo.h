@@ -113,6 +113,11 @@ public:
                    bool KillSrc, bool RenamableDest = false,
                    bool RenamableSrc = false) const override;
 
+  bool isWideSpill(const TargetRegisterClass *RC) const;
+
+  void resizeVectorSpillSlot(MachineFrameInfo &MFI, int FI,
+                           const TargetRegisterClass *RC) const;
+
   void storeRegToStackSlot(
       MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI, Register SrcReg,
       bool IsKill, int FrameIndex, const TargetRegisterClass *RC,

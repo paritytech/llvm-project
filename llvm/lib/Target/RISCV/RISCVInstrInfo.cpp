@@ -518,12 +518,6 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     return;
   }
 
-  if (RISCV::WREGRegClass.contains(DstReg, SrcReg)) {
-    BuildMI(MBB, MBBI, DL, get(RISCV::REVIVE_W_MV), DstReg)
-        .addReg(SrcReg, KillFlag | getRenamableRegState(RenamableSrc));
-    return;
-  }
-
   if (RISCV::GPRF16RegClass.contains(DstReg, SrcReg)) {
     BuildMI(MBB, MBBI, DL, get(RISCV::PseudoMV_FPR16INX), DstReg)
         .addReg(SrcReg, KillFlag | getRenamableRegState(RenamableSrc));
@@ -650,6 +644,32 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   llvm_unreachable("Impossible reg-to-reg copy");
 }
 
+// Whether a spill of this register class goes through the wide load and store rather
+// than the whole register vector ones.
+//
+// A pair of vector registers is exactly a wide register, so both reach the same bytes.
+// The wide instructions carry an offset of their own, where a whole register store needs
+// the address computed into a register first, and they address an ordinary fixed size
+// stack object rather than one whose offset is scaled by the vector length at run time.
+bool RISCVInstrInfo::isWideSpill(const TargetRegisterClass *RC) const {
+  return STI.hasVendorXReviveVec() && RISCV::VRM2RegClass.hasSubClassEq(RC);
+}
+
+// Restates a spill slot's size and alignment now that it is an ordinary stack object.
+//
+// The register class reports the size a vector register group takes at the smallest
+// vector length the target allows, because in general that is all a compiler knows. This
+// one knows the length exactly, so the slot is that size scaled up; left as it was, two
+// slots would overlap. The alignment goes the other way: none of these accesses require
+// any, and asking for the register width would realign the stack of every function that
+// spills.
+void RISCVInstrInfo::resizeVectorSpillSlot(MachineFrameInfo &MFI, int FI,
+                                           const TargetRegisterClass *RC) const {
+  unsigned VScale = STI.getRealMinVLen() / RISCV::RVVBitsPerBlock;
+  MFI.setObjectSize(FI, RegInfo.getRegSizeInBits(*RC) / 8 * VScale);
+  MFI.setObjectAlignment(FI, Align(STI.getXLen() / 8));
+}
+
 void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator I,
                                          Register SrcReg, bool IsKill, int FI,
@@ -664,10 +684,10 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   if (RISCV::GPRRegClass.hasSubClassEq(RC)) {
     Opcode = RegInfo.getRegSizeInBits(RISCV::GPRRegClass) == 32 ? RISCV::SW
                                                                 : RISCV::SD;
-  } else if (RISCV::WREGRegClass.hasSubClassEq(RC)) {
-    // A wide slot is a plain 32-byte stack object, not a scalable one, so the
-    // fixed-offset path below addresses it without querying the vector length.
+  } else if (isWideSpill(RC)) {
     Opcode = RISCV::REVIVE_W_ST;
+    resizeVectorSpillSlot(MFI, FI, RC);
+    Alignment = MFI.getObjectAlign(FI);
   } else if (RISCV::GPRF16RegClass.hasSubClassEq(RC)) {
     Opcode = RISCV::SH_INX;
   } else if (RISCV::GPRF32RegClass.hasSubClassEq(RC)) {
@@ -718,12 +738,21 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   else
     llvm_unreachable("Can't store this register to stack slot");
 
-  if (RISCVRegisterInfo::isRVVRegClass(RC)) {
+  if (RISCVRegisterInfo::isRVVRegClass(RC) && !isWideSpill(RC)) {
+    // With the vector length known the slot is an ordinary stack object, whose size is
+    // the one the register class states scaled up to the real width.
+    bool IsScalable = !STI.getRealVLenIfAny();
+    if (!IsScalable)
+      resizeVectorSpillSlot(MFI, FI, RC);
+
     MachineMemOperand *MMO = MF->getMachineMemOperand(
         MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
-        TypeSize::getScalable(MFI.getObjectSize(FI)), Alignment);
+        IsScalable ? TypeSize::getScalable(MFI.getObjectSize(FI))
+                   : TypeSize::getFixed(MFI.getObjectSize(FI)),
+        MFI.getObjectAlign(FI));
 
-    MFI.setStackID(FI, TargetStackID::ScalableVector);
+    if (IsScalable)
+      MFI.setStackID(FI, TargetStackID::ScalableVector);
     BuildMI(MBB, I, DebugLoc(), get(Opcode))
         .addReg(SrcReg, getKillRegState(IsKill))
         .addFrameIndex(FI)
@@ -760,8 +789,10 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   if (RISCV::GPRRegClass.hasSubClassEq(RC)) {
     Opcode = RegInfo.getRegSizeInBits(RISCV::GPRRegClass) == 32 ? RISCV::LW
                                                                 : RISCV::LD;
-  } else if (RISCV::WREGRegClass.hasSubClassEq(RC)) {
+  } else if (isWideSpill(RC)) {
     Opcode = RISCV::REVIVE_W_LD;
+    resizeVectorSpillSlot(MFI, FI, RC);
+    Alignment = MFI.getObjectAlign(FI);
   } else if (RISCV::GPRF16RegClass.hasSubClassEq(RC)) {
     Opcode = RISCV::LH_INX;
   } else if (RISCV::GPRF32RegClass.hasSubClassEq(RC)) {
@@ -812,12 +843,19 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   else
     llvm_unreachable("Can't load this register from stack slot");
 
-  if (RISCVRegisterInfo::isRVVRegClass(RC)) {
+  if (RISCVRegisterInfo::isRVVRegClass(RC) && !isWideSpill(RC)) {
+    bool IsScalable = !STI.getRealVLenIfAny();
+    if (!IsScalable)
+      resizeVectorSpillSlot(MFI, FI, RC);
+
     MachineMemOperand *MMO = MF->getMachineMemOperand(
         MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
-        TypeSize::getScalable(MFI.getObjectSize(FI)), Alignment);
+        IsScalable ? TypeSize::getScalable(MFI.getObjectSize(FI))
+                   : TypeSize::getFixed(MFI.getObjectSize(FI)),
+        MFI.getObjectAlign(FI));
 
-    MFI.setStackID(FI, TargetStackID::ScalableVector);
+    if (IsScalable)
+      MFI.setStackID(FI, TargetStackID::ScalableVector);
     BuildMI(MBB, I, DL, get(Opcode), DstReg)
         .addFrameIndex(FI)
         .addMemOperand(MMO)

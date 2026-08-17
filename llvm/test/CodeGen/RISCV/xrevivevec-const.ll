@@ -9,7 +9,7 @@
 define i256 @const_zero() {
 ; CHECK-LABEL: const_zero:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wzext w0, zero
+; CHECK-NEXT:    revive.wzext v8, zero
 ; CHECK-NEXT:    ret
   ret i256 0
 }
@@ -18,7 +18,7 @@ define i256 @const_small() {
 ; CHECK-LABEL: const_small:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, 1234
-; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   ret i256 1234
 }
@@ -28,7 +28,7 @@ define i256 @const_mask32() {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, -1
 ; CHECK-NEXT:    srli a0, a0, 32
-; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   ret i256 4294967295
 }
@@ -37,7 +37,7 @@ define i256 @const_mask64() {
 ; CHECK-LABEL: const_mask64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, -1
-; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   ret i256 18446744073709551615
 }
@@ -46,7 +46,7 @@ define i256 @const_allones() {
 ; CHECK-LABEL: const_allones:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, -1
-; CHECK-NEXT:    revive.wsext w0, a0
+; CHECK-NEXT:    revive.wsext v8, a0
 ; CHECK-NEXT:    ret
   ret i256 -1
 }
@@ -55,7 +55,7 @@ define i256 @const_negative() {
 ; CHECK-LABEL: const_negative:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, -1234
-; CHECK-NEXT:    revive.wsext w0, a0
+; CHECK-NEXT:    revive.wsext v8, a0
 ; CHECK-NEXT:    ret
   ret i256 -1234
 }
@@ -66,9 +66,9 @@ define i256 @const_wide() {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, -1
 ; CHECK-NEXT:    srli a0, a0, 32
-; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    li a0, 160
-; CHECK-NEXT:    revive.wsll w0, w0, a0
+; CHECK-NEXT:    revive.wsll v8, v8, a0
 ; CHECK-NEXT:    ret
   ret i256 6277101733925179126504886505003981583386072424808101969920
 }
@@ -78,8 +78,8 @@ define i256 @const_operand(i256 %a) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, -1
 ; CHECK-NEXT:    srli a0, a0, 32
-; CHECK-NEXT:    revive.wzext w1, a0
-; CHECK-NEXT:    revive.wand w0, w0, w1
+; CHECK-NEXT:    revive.wzext v10, a0
+; CHECK-NEXT:    revive.wand v8, v8, v10
 ; CHECK-NEXT:    ret
   %r = and i256 %a, 4294967295
   ret i256 %r

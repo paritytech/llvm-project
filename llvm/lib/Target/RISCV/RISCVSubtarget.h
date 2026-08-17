@@ -267,6 +267,15 @@ public:
     return Min;
   }
 
+  // As above, but also answers for a subtarget with no vector extension at all, which
+  // has no vector length rather than an unknown one. Callers that run for every function
+  // regardless of the extensions in force want this one.
+  std::optional<unsigned> getRealVLenIfAny() const {
+    if (!hasVInstructions())
+      return std::nullopt;
+    return getRealVLen();
+  }
+
   /// If the ElementCount or TypeSize \p X is scalable and VScale (VLEN) is
   /// exactly known, returns \p X converted to a fixed quantity. Otherwise
   /// returns \p X unmodified.

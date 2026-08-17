@@ -11,9 +11,12 @@
 // has no carry flag, so the generic expansion pays an `sltu` per carry: 56 bytes
 // for one `add i256`, 86 for `icmp ult`.
 //
-// Values live in WREG, a file of sixteen 256-bit registers of the extension's
-// own. The semantics are scalar: nothing here reads `vtype` or `vl`, and the
-// width is fixed by the opcode, not by a `vsetvli`.
+// Values live in the vector registers, a pair to a value at LMUL=2, so the
+// extension is an addition to the vector extensions rather than a replacement
+// for them: copies are `vmv2r.v` and a wide value can be built by ordinary
+// vector code. The semantics of the instructions below are scalar, though:
+// nothing here reads `vtype` or `vl`, and the width is fixed by the opcode
+// rather than by a `vsetvli`.
 //
 //===----------------------------------------------------------------------===//
 
@@ -45,43 +48,43 @@ def riscv_wide_ctz : RVSDNode<"WIDE_CTZ", SDT_ReviveCount>;
 // custom-2 opcode space, leaving custom-3 for XReviveCarry. funct3 selects the
 // operand shape, funct7 the operation within it.
 class RVReviveALU<bits<7> funct7, string opcodestr>
-    : RVInstR<funct7, 0b000, OPC_CUSTOM_2, (outs WREG:$rd),
-              (ins WREG:$rs1, WREG:$rs2), opcodestr, "$rd, $rs1, $rs2">;
+    : RVInstR<funct7, 0b000, OPC_CUSTOM_2, (outs VRM2:$rd),
+              (ins VRM2:$rs1, VRM2:$rs2), opcodestr, "$rd, $rs1, $rs2">;
 
 // Comparisons narrow to a GPR: the result feeds branches and selects.
 class RVReviveCmp<bits<7> funct7, string opcodestr>
     : RVInstR<funct7, 0b001, OPC_CUSTOM_2, (outs GPR:$rd),
-              (ins WREG:$rs1, WREG:$rs2), opcodestr, "$rd, $rs1, $rs2">;
+              (ins VRM2:$rs1, VRM2:$rs2), opcodestr, "$rd, $rs1, $rs2">;
 
 // Shift amounts come from a GPR: only the low bits can matter.
 class RVReviveShift<bits<7> funct7, string opcodestr>
-    : RVInstR<funct7, 0b010, OPC_CUSTOM_2, (outs WREG:$rd),
-              (ins WREG:$rs1, GPR:$rs2), opcodestr, "$rd, $rs1, $rs2">;
+    : RVInstR<funct7, 0b010, OPC_CUSTOM_2, (outs VRM2:$rd),
+              (ins VRM2:$rs1, GPR:$rs2), opcodestr, "$rd, $rs1, $rs2">;
 
 // Conversions between a wide value and an XLen one.
 class RVReviveCvtToGPR<bits<7> funct7, string opcodestr>
-    : RVInstR<funct7, 0b110, OPC_CUSTOM_2, (outs GPR:$rd), (ins WREG:$rs1),
+    : RVInstR<funct7, 0b110, OPC_CUSTOM_2, (outs GPR:$rd), (ins VRM2:$rs1),
               opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
 
 class RVReviveCvtToWide<bits<7> funct7, string opcodestr>
-    : RVInstR<funct7, 0b111, OPC_CUSTOM_2, (outs WREG:$rd), (ins GPR:$rs1),
+    : RVInstR<funct7, 0b111, OPC_CUSTOM_2, (outs VRM2:$rd), (ins GPR:$rs1),
               opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
 
 // A wide unary, which is also the shape a register copy takes.
 class RVReviveMove<bits<7> funct7, string opcodestr>
-    : RVInstR<funct7, 0b110, OPC_CUSTOM_2, (outs WREG:$rd), (ins WREG:$rs1),
+    : RVInstR<funct7, 0b110, OPC_CUSTOM_2, (outs VRM2:$rd), (ins VRM2:$rs1),
               opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
 
 // The modular operations take three wide inputs, so they need R4.
 class RVReviveR4<bits<2> funct2, string opcodestr>
-    : RVInstR4<funct2, 0b011, OPC_CUSTOM_2, (outs WREG:$rd),
-               (ins WREG:$rs1, WREG:$rs2, WREG:$rs3), opcodestr,
+    : RVInstR4<funct2, 0b011, OPC_CUSTOM_2, (outs VRM2:$rd),
+               (ins VRM2:$rs1, VRM2:$rs2, VRM2:$rs3), opcodestr,
                "$rd, $rs1, $rs2, $rs3">;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in {
@@ -120,8 +123,6 @@ def REVIVE_W_SLT  : RVReviveCmp<0b0000011, "revive.wslt">;
 // Moves and conversions
 //===----------------------------------------------------------------------===//
 
-let isMoveReg = 1 in
-def REVIVE_W_MV    : RVReviveMove<0b0000000, "revive.wmv">;
 def REVIVE_W_BSWAP : RVReviveMove<0b0000010, "revive.wbswap">;
 def REVIVE_W_TRUNC : RVReviveCvtToGPR<0b0000001, "revive.wtrunc">;
 def REVIVE_W_CPOP  : RVReviveCvtToGPR<0b0000011, "revive.wcpop">;
@@ -153,13 +154,13 @@ def REVIVE_W_SIGNEXT: RVReviveALU<0b0001011, "revive.wsignextend">;
 
 let Predicates = [HasVendorXReviveVec] in {
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-def REVIVE_W_LD : RVInstI<0b100, OPC_CUSTOM_2, (outs WREG:$rd),
+def REVIVE_W_LD : RVInstI<0b100, OPC_CUSTOM_2, (outs VRM2:$rd),
                           (ins GPRMem:$rs1, simm12_lo:$imm12), "revive.wld",
                           "$rd, ${imm12}(${rs1})">;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
 def REVIVE_W_ST : RVInstS<0b101, OPC_CUSTOM_2, (outs),
-                          (ins WREG:$rs2, GPRMem:$rs1, simm12_lo:$imm12),
+                          (ins VRM2:$rs2, GPRMem:$rs1, simm12_lo:$imm12),
                           "revive.wst", "$rs2, ${imm12}(${rs1})">;
 } // Predicates = [HasVendorXReviveVec]
 
@@ -168,76 +169,76 @@ def REVIVE_W_ST : RVInstS<0b101, OPC_CUSTOM_2, (outs),
 //===----------------------------------------------------------------------===//
 
 let Predicates = [HasVendorXReviveVec] in {
-def : Pat<(i256 (add (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_ADD  (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (sub (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_SUB  (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (mul (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_MUL  (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (and (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_AND  (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (or  (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_OR   (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (xor (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_XOR  (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (udiv (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_UDIV (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (sdiv (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_SDIV (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (urem (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_UREM (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i256 (srem (i256 WREG:$rs1), (i256 WREG:$rs2))), (REVIVE_W_SREM (i256 WREG:$rs1), (i256 WREG:$rs2))>;
+def : Pat<(i256 (add (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_ADD  (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (sub (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_SUB  (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (mul (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_MUL  (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (and (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_AND  (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (or  (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_OR   (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (xor (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_XOR  (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (udiv (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_UDIV (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (sdiv (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_SDIV (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (urem (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_UREM (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i256 (srem (i256 VRM2:$rs1), (i256 VRM2:$rs2))), (REVIVE_W_SREM (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
 
 // The IR types both shift operands i256; the DAG often narrows the amount
 // first, so both forms are matched.
-def : Pat<(i256 (shl (i256 WREG:$rs1), (XLenVT GPR:$rs2))),
-          (REVIVE_W_SLL (i256 WREG:$rs1), GPR:$rs2)>;
-def : Pat<(i256 (srl (i256 WREG:$rs1), (XLenVT GPR:$rs2))),
-          (REVIVE_W_SRL (i256 WREG:$rs1), GPR:$rs2)>;
-def : Pat<(i256 (sra (i256 WREG:$rs1), (XLenVT GPR:$rs2))),
-          (REVIVE_W_SRA (i256 WREG:$rs1), GPR:$rs2)>;
-def : Pat<(i256 (shl (i256 WREG:$rs1), (i256 WREG:$rs2))),
-          (REVIVE_W_SLL (i256 WREG:$rs1), (REVIVE_W_TRUNC (i256 WREG:$rs2)))>;
-def : Pat<(i256 (srl (i256 WREG:$rs1), (i256 WREG:$rs2))),
-          (REVIVE_W_SRL (i256 WREG:$rs1), (REVIVE_W_TRUNC (i256 WREG:$rs2)))>;
-def : Pat<(i256 (sra (i256 WREG:$rs1), (i256 WREG:$rs2))),
-          (REVIVE_W_SRA (i256 WREG:$rs1), (REVIVE_W_TRUNC (i256 WREG:$rs2)))>;
+def : Pat<(i256 (shl (i256 VRM2:$rs1), (XLenVT GPR:$rs2))),
+          (REVIVE_W_SLL (i256 VRM2:$rs1), GPR:$rs2)>;
+def : Pat<(i256 (srl (i256 VRM2:$rs1), (XLenVT GPR:$rs2))),
+          (REVIVE_W_SRL (i256 VRM2:$rs1), GPR:$rs2)>;
+def : Pat<(i256 (sra (i256 VRM2:$rs1), (XLenVT GPR:$rs2))),
+          (REVIVE_W_SRA (i256 VRM2:$rs1), GPR:$rs2)>;
+def : Pat<(i256 (shl (i256 VRM2:$rs1), (i256 VRM2:$rs2))),
+          (REVIVE_W_SLL (i256 VRM2:$rs1), (REVIVE_W_TRUNC (i256 VRM2:$rs2)))>;
+def : Pat<(i256 (srl (i256 VRM2:$rs1), (i256 VRM2:$rs2))),
+          (REVIVE_W_SRL (i256 VRM2:$rs1), (REVIVE_W_TRUNC (i256 VRM2:$rs2)))>;
+def : Pat<(i256 (sra (i256 VRM2:$rs1), (i256 VRM2:$rs2))),
+          (REVIVE_W_SRA (i256 VRM2:$rs1), (REVIVE_W_TRUNC (i256 VRM2:$rs2)))>;
 
-def : Pat<(XLenVT (setcc (i256 WREG:$rs1), (i256 WREG:$rs2), SETEQ)),
-          (REVIVE_W_SEQ (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(XLenVT (setcc (i256 WREG:$rs1), (i256 WREG:$rs2), SETNE)),
-          (REVIVE_W_SNE (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(XLenVT (setcc (i256 WREG:$rs1), (i256 WREG:$rs2), SETULT)),
-          (REVIVE_W_SLTU (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(XLenVT (setcc (i256 WREG:$rs1), (i256 WREG:$rs2), SETLT)),
-          (REVIVE_W_SLT (i256 WREG:$rs1), (i256 WREG:$rs2))>;
+def : Pat<(XLenVT (setcc (i256 VRM2:$rs1), (i256 VRM2:$rs2), SETEQ)),
+          (REVIVE_W_SEQ (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(XLenVT (setcc (i256 VRM2:$rs1), (i256 VRM2:$rs2), SETNE)),
+          (REVIVE_W_SNE (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(XLenVT (setcc (i256 VRM2:$rs1), (i256 VRM2:$rs2), SETULT)),
+          (REVIVE_W_SLTU (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(XLenVT (setcc (i256 VRM2:$rs1), (i256 VRM2:$rs2), SETLT)),
+          (REVIVE_W_SLT (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
 // The reversed forms are the same instruction with operands swapped, so `ugt`
 // and `sgt` need no encodings of their own.
-def : Pat<(XLenVT (setcc (i256 WREG:$rs1), (i256 WREG:$rs2), SETUGT)),
-          (REVIVE_W_SLTU (i256 WREG:$rs2), (i256 WREG:$rs1))>;
-def : Pat<(XLenVT (setcc (i256 WREG:$rs1), (i256 WREG:$rs2), SETGT)),
-          (REVIVE_W_SLT (i256 WREG:$rs2), (i256 WREG:$rs1))>;
+def : Pat<(XLenVT (setcc (i256 VRM2:$rs1), (i256 VRM2:$rs2), SETUGT)),
+          (REVIVE_W_SLTU (i256 VRM2:$rs2), (i256 VRM2:$rs1))>;
+def : Pat<(XLenVT (setcc (i256 VRM2:$rs1), (i256 VRM2:$rs2), SETGT)),
+          (REVIVE_W_SLT (i256 VRM2:$rs2), (i256 VRM2:$rs1))>;
 
-def : Pat<(i256 (bswap (i256 WREG:$rs1))), (REVIVE_W_BSWAP (i256 WREG:$rs1))>;
+def : Pat<(i256 (bswap (i256 VRM2:$rs1))), (REVIVE_W_BSWAP (i256 VRM2:$rs1))>;
 
 // sign_extend_inreg is formed after legalization, so the Custom lowering does not
 // always see it. Narrow to a GPR, sign-extend there, and widen back.
-def : Pat<(i256 (sext_inreg (i256 WREG:$rs1), i32)),
-          (REVIVE_W_SEXT (ADDIW (REVIVE_W_TRUNC (i256 WREG:$rs1)), 0))>;
-def : Pat<(i256 (sext_inreg (i256 WREG:$rs1), i16)),
-          (REVIVE_W_SEXT (SRAI (SLLI (REVIVE_W_TRUNC (i256 WREG:$rs1)), 48), 48))>;
-def : Pat<(i256 (sext_inreg (i256 WREG:$rs1), i8)),
-          (REVIVE_W_SEXT (SRAI (SLLI (REVIVE_W_TRUNC (i256 WREG:$rs1)), 56), 56))>;
+def : Pat<(i256 (sext_inreg (i256 VRM2:$rs1), i32)),
+          (REVIVE_W_SEXT (ADDIW (REVIVE_W_TRUNC (i256 VRM2:$rs1)), 0))>;
+def : Pat<(i256 (sext_inreg (i256 VRM2:$rs1), i16)),
+          (REVIVE_W_SEXT (SRAI (SLLI (REVIVE_W_TRUNC (i256 VRM2:$rs1)), 48), 48))>;
+def : Pat<(i256 (sext_inreg (i256 VRM2:$rs1), i8)),
+          (REVIVE_W_SEXT (SRAI (SLLI (REVIVE_W_TRUNC (i256 VRM2:$rs1)), 56), 56))>;
 
-def : Pat<(XLenVT (riscv_wide_cpop (i256 WREG:$rs1))), (REVIVE_W_CPOP (i256 WREG:$rs1))>;
-def : Pat<(XLenVT (riscv_wide_clz (i256 WREG:$rs1))), (REVIVE_W_CLZ (i256 WREG:$rs1))>;
-def : Pat<(XLenVT (riscv_wide_ctz (i256 WREG:$rs1))), (REVIVE_W_CTZ (i256 WREG:$rs1))>;
+def : Pat<(XLenVT (riscv_wide_cpop (i256 VRM2:$rs1))), (REVIVE_W_CPOP (i256 VRM2:$rs1))>;
+def : Pat<(XLenVT (riscv_wide_clz (i256 VRM2:$rs1))), (REVIVE_W_CLZ (i256 VRM2:$rs1))>;
+def : Pat<(XLenVT (riscv_wide_ctz (i256 VRM2:$rs1))), (REVIVE_W_CTZ (i256 VRM2:$rs1))>;
 
 def : Pat<(riscv_wide_zext (XLenVT GPR:$rs1)), (REVIVE_W_ZEXT GPR:$rs1)>;
 def : Pat<(riscv_wide_sext (XLenVT GPR:$rs1)), (REVIVE_W_SEXT GPR:$rs1)>;
 
 // The stdlib replacements. These are reached through intrinsics rather than
 // ordinary IR because they have no LLVM opcode.
-def : Pat<(int_riscv_revive_addmod (i256 WREG:$rs1), (i256 WREG:$rs2), (i256 WREG:$rs3)),
-          (REVIVE_W_ADDMOD (i256 WREG:$rs1), (i256 WREG:$rs2), (i256 WREG:$rs3))>;
-def : Pat<(int_riscv_revive_mulmod (i256 WREG:$rs1), (i256 WREG:$rs2), (i256 WREG:$rs3)),
-          (REVIVE_W_MULMOD (i256 WREG:$rs1), (i256 WREG:$rs2), (i256 WREG:$rs3))>;
-def : Pat<(int_riscv_revive_exp (i256 WREG:$rs1), (i256 WREG:$rs2)),
-          (REVIVE_W_EXP (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(int_riscv_revive_signextend (i256 WREG:$rs1), (i256 WREG:$rs2)),
-          (REVIVE_W_SIGNEXT (i256 WREG:$rs1), (i256 WREG:$rs2))>;
-def : Pat<(i64 (trunc (i256 WREG:$rs1))), (REVIVE_W_TRUNC (i256 WREG:$rs1))>;
+def : Pat<(int_riscv_revive_addmod (i256 VRM2:$rs1), (i256 VRM2:$rs2), (i256 VRM2:$rs3)),
+          (REVIVE_W_ADDMOD (i256 VRM2:$rs1), (i256 VRM2:$rs2), (i256 VRM2:$rs3))>;
+def : Pat<(int_riscv_revive_mulmod (i256 VRM2:$rs1), (i256 VRM2:$rs2), (i256 VRM2:$rs3)),
+          (REVIVE_W_MULMOD (i256 VRM2:$rs1), (i256 VRM2:$rs2), (i256 VRM2:$rs3))>;
+def : Pat<(int_riscv_revive_exp (i256 VRM2:$rs1), (i256 VRM2:$rs2)),
+          (REVIVE_W_EXP (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(int_riscv_revive_signextend (i256 VRM2:$rs1), (i256 VRM2:$rs2)),
+          (REVIVE_W_SIGNEXT (i256 VRM2:$rs1), (i256 VRM2:$rs2))>;
+def : Pat<(i64 (trunc (i256 VRM2:$rs1))), (REVIVE_W_TRUNC (i256 VRM2:$rs1))>;
 def : Pat<(i256 (zext GPR:$rs1)), (REVIVE_W_ZEXT GPR:$rs1)>;
 def : Pat<(i256 (sext GPR:$rs1)), (REVIVE_W_SEXT GPR:$rs1)>;
 def : Pat<(i256 (anyext GPR:$rs1)), (REVIVE_W_ZEXT GPR:$rs1)>;
@@ -264,8 +265,8 @@ def : Pat<(i256 (sextloadi32 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
 
 def : Pat<(i256 (load (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
           (REVIVE_W_LD GPR:$rs1, simm12_lo:$imm12)>;
-def : Pat<(store (i256 WREG:$rs2), (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12)),
-          (REVIVE_W_ST (i256 WREG:$rs2), GPR:$rs1, simm12_lo:$imm12)>;
+def : Pat<(store (i256 VRM2:$rs2), (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12)),
+          (REVIVE_W_ST (i256 VRM2:$rs2), GPR:$rs1, simm12_lo:$imm12)>;
 } // Predicates = [HasVendorXReviveVec]
 
 //===----------------------------------------------------------------------===//
@@ -275,4 +276,4 @@ def : Pat<(store (i256 WREG:$rs2), (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm
 // The same conditional-branch triangle as the scalar select; there is no wide
 // conditional move to fold into.
 let Predicates = [HasVendorXReviveVec] in
-defm Select_WREG : SelectCC_GPR_rrirr<WREG, i256>;
+defm Select_VRM2 : SelectCC_GPR_rrirr<VRM2, i256>;

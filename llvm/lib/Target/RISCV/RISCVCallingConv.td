@@ -15,11 +15,19 @@
 
 def CSR_ILP32E_LP64E : CalleeSavedRegs<(add X1, X8, X9)>;
 
-// Wide values are what revive keeps live across calls, so half the wide file is
-// callee saved: the caller would otherwise spill and reload every one of them at
-// every call site, where a callee that uses them pays once.
+// Wide values are what revive keeps live across calls, so half the vector file
+// is callee saved: the caller would otherwise spill and reload every one of them
+// at every call site, where a callee that uses them pays once. This is the one
+// place the extension departs from the standard vector calling convention, which
+// has no callee-saved vector register, and it applies only to the pairs that
+// carry no argument.
+// The pairs are named rather than the registers they are made of, because that is the
+// unit a wide value occupies: a register is preserved across a call when it is in the
+// list or beneath something that is, so listing the halves would leave the pair itself
+// looking clobbered and the allocator would never use one.
 def CSR_ILP32E_LP64E_XReviveVec
-    : CalleeSavedRegs<(add CSR_ILP32E_LP64E, (sequence "W%u", 8, 15))>;
+    : CalleeSavedRegs<(add CSR_ILP32E_LP64E, (sequence "V%uM2", 24, 30, 2),
+                                             (sequence "V%uM2", 0, 6, 2))>;
 
 def CSR_ILP32_LP64
     : CalleeSavedRegs<(add CSR_ILP32E_LP64E, (sequence "X%u", 18, 27))>;

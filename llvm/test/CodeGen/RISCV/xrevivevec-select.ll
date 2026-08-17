@@ -10,7 +10,8 @@ define i256 @select_i256(i256 %a, i256 %b, i64 %c) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    beqz a0, .LBB0_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    revive.wmv w0, w1
+; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
+; CHECK-NEXT:    vmv2r.v v8, v10
 ; CHECK-NEXT:  .LBB0_2:
 ; CHECK-NEXT:    ret
   %t = icmp eq i64 %c, 0
@@ -21,10 +22,11 @@ define i256 @select_i256(i256 %a, i256 %b, i64 %c) {
 define i256 @select_wide_cond(i256 %a, i256 %b) {
 ; CHECK-LABEL: select_wide_cond:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wsltu a0, w0, w1
+; CHECK-NEXT:    revive.wsltu a0, v8, v10
 ; CHECK-NEXT:    bnez a0, .LBB1_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    revive.wmv w0, w1
+; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
+; CHECK-NEXT:    vmv2r.v v8, v10
 ; CHECK-NEXT:  .LBB1_2:
 ; CHECK-NEXT:    ret
   %t = icmp ult i256 %a, %b
@@ -37,10 +39,10 @@ define i256 @phi_i256(i256 %a, i256 %b, i64 %c) {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    beqz a0, .LBB2_2
 ; CHECK-NEXT:  # %bb.1: # %else
-; CHECK-NEXT:    revive.wsub w0, w0, w1
+; CHECK-NEXT:    revive.wsub v8, v8, v10
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB2_2: # %then
-; CHECK-NEXT:    revive.wadd w0, w0, w1
+; CHECK-NEXT:    revive.wadd v8, v8, v10
 ; CHECK-NEXT:    ret
 entry:
   %t = icmp eq i64 %c, 0
@@ -65,44 +67,44 @@ define i256 @spill_wide(ptr %p) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 304
 ; CHECK-NEXT:    sd ra, 296(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    revive.wld w0, 0(a0)
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 264(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 232(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 200(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 168(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 136(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 104(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 72(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 40(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.wld w1, 0(a0)
-; CHECK-NEXT:    revive.wst w1, 8(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v8, 0(a0)
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 264(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 232(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 200(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 168(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 136(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 104(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 72(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 40(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 8(sp) # 32-byte Folded Spill
 ; CHECK-NEXT:    call sink1
-; CHECK-NEXT:    revive.wld w1, 264(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
-; CHECK-NEXT:    revive.wld w1, 232(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
-; CHECK-NEXT:    revive.wld w1, 200(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
-; CHECK-NEXT:    revive.wld w1, 168(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
-; CHECK-NEXT:    revive.wld w1, 136(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
-; CHECK-NEXT:    revive.wld w1, 104(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
-; CHECK-NEXT:    revive.wld w1, 72(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
-; CHECK-NEXT:    revive.wld w1, 40(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
-; CHECK-NEXT:    revive.wld w1, 8(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.wadd w0, w0, w1
+; CHECK-NEXT:    revive.wld v10, 264(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wld v10, 232(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wld v10, 200(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wld v10, 168(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wld v10, 136(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wld v10, 104(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wld v10, 72(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wld v10, 40(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wld v10, 8(sp) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
 ; CHECK-NEXT:    ld ra, 296(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
 ; CHECK-NEXT:    addi sp, sp, 304

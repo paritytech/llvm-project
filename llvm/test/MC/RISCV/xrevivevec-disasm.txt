@@ -7,87 +7,84 @@
 # the extension every encoding below is invalid, which is what keeps the custom-2
 # opcode space gated.
 
-# CHECK: revive.wadd	w8, w8, w10
+# CHECK: revive.wadd	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x00
-# CHECK: revive.wsub	w8, w8, w10
+# CHECK: revive.wsub	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x02
-# CHECK: revive.wmul	w8, w8, w10
+# CHECK: revive.wmul	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x04
-# CHECK: revive.wand	w8, w8, w10
+# CHECK: revive.wand	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x06
-# CHECK: revive.wor	w8, w8, w10
+# CHECK: revive.wor	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x08
-# CHECK: revive.wxor	w8, w8, w10
+# CHECK: revive.wxor	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x0a
-# CHECK: revive.wdivu	w8, w8, w10
+# CHECK: revive.wdivu	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x0c
-# CHECK: revive.wdiv	w8, w8, w10
+# CHECK: revive.wdiv	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x0e
-# CHECK: revive.wremu	w8, w8, w10
+# CHECK: revive.wremu	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x10
-# CHECK: revive.wrem	w8, w8, w10
+# CHECK: revive.wrem	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x12
-# CHECK: revive.wtrunc	a0, w10
+# CHECK: revive.wtrunc	a0, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x65,0x05,0x02
-# CHECK: revive.wsll	w8, w8, a0
+# CHECK: revive.wsll	v8, v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x24,0xa4,0x00
-# CHECK: revive.wsrl	w8, w8, a0
+# CHECK: revive.wsrl	v8, v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x24,0xa4,0x02
-# CHECK: revive.wsra	w8, w8, a0
+# CHECK: revive.wsra	v8, v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x24,0xa4,0x04
-# CHECK: revive.wseq	a0, w8, w10
+# CHECK: revive.wseq	a0, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x15,0xa4,0x00
-# CHECK: revive.wsne	a0, w8, w10
+# CHECK: revive.wsne	a0, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x15,0xa4,0x02
-# CHECK: revive.wsltu	a0, w8, w10
+# CHECK: revive.wsltu	a0, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x15,0xa4,0x04
-# CHECK: revive.wslt	a0, w8, w10
+# CHECK: revive.wslt	a0, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x15,0xa4,0x06
-# CHECK: revive.waddmod	w8, w8, w10, w12
+# CHECK: revive.waddmod	v8, v8, v10, v12
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x34,0xa4,0x60
-# CHECK: revive.wmulmod	w8, w8, w10, w12
+# CHECK: revive.wmulmod	v8, v8, v10, v12
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x34,0xa4,0x62
-# CHECK: revive.wexp	w8, w8, w10
+# CHECK: revive.wexp	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x14
-# CHECK: revive.wsignextend	w8, w8, w10
+# CHECK: revive.wsignextend	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x16
-# CHECK: revive.wmv	w8, w10
-# CHECK-NO-EXT: invalid instruction encoding
-0x5b,0x64,0x05,0x00
-# CHECK: revive.wbswap	w8, w8
+# CHECK: revive.wbswap	v8, v8
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x64,0x04,0x04
-# CHECK: revive.wld	w8, 0(a0)
+# CHECK: revive.wld	v8, 0(a0)
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x44,0x05,0x00
-# CHECK: revive.wst	w8, 0(a0)
+# CHECK: revive.wst	v8, 0(a0)
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x50,0x85,0x00
-# CHECK: revive.wzext	w8, a0
+# CHECK: revive.wzext	v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x74,0x05,0x00
-# CHECK: revive.wsext	w8, a0
+# CHECK: revive.wsext	v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x74,0x05,0x02

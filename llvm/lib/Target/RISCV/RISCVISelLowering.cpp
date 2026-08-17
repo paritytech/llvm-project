@@ -158,7 +158,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   // With a register class, type legalization stops expanding i256 into i64
   // limbs and the operations below select as single instructions.
   if (Subtarget.hasVendorXReviveVec())
-    addRegisterClass(MVT::i256, &RISCV::WREGRegClass);
+    addRegisterClass(MVT::i256, &RISCV::VRM2RegClass);
 
   static const MVT::SimpleValueType BoolVecVTs[] = {
       MVT::nxv1i1,  MVT::nxv2i1,  MVT::nxv4i1, MVT::nxv8i1,
@@ -23713,7 +23713,7 @@ RISCVTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RISCV::Select_FPR32INX_Using_CC_GPR:
   case RISCV::Select_FPR64_Using_CC_GPR:
   case RISCV::Select_FPR64INX_Using_CC_GPR:
-  case RISCV::Select_WREG_Using_CC_GPR:
+  case RISCV::Select_VRM2_Using_CC_GPR:
   case RISCV::Select_FPR64IN32X_Using_CC_GPR:
     return emitSelectPseudo(MI, BB, Subtarget);
   case RISCV::BuildPairF64Pseudo:

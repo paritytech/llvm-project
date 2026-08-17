@@ -1753,7 +1753,17 @@ static bool hasRVVFrameObject(const MachineFunction &MF) {
   // D103622.
   //
   // Refer to https://github.com/llvm/llvm-project/issues/53016.
-  return MF.getSubtarget<RISCVSubtarget>().hasVInstructions();
+  //
+  // None of that applies when the vector length is exactly known, because then no stack
+  // object is scalable and the region does not exist. Answering the question truthfully
+  // there matters: the alignment this guards is imposed on the whole frame, which would
+  // otherwise force every function in the module to realign its stack and keep a frame
+  // pointer for a region it does not have.
+  const auto &Subtarget = MF.getSubtarget<RISCVSubtarget>();
+  if (Subtarget.getRealVLenIfAny())
+    return false;
+
+  return Subtarget.hasVInstructions();
 }
 
 static unsigned estimateFunctionSizeInBytes(const MachineFunction &MF,
@@ -2075,10 +2085,23 @@ bool RISCVFrameLowering::assignCalleeSavedSpillSlots(
     // the TargetRegisterClass if the stack alignment is smaller. Use the
     // min.
     Alignment = std::min(Alignment, getStackAlign());
+
+    // A vector register's size is stated for the shortest vector length the target
+    // allows. Where the length is known exactly the slot is that size scaled up, and an
+    // ordinary stack object rather than one in the region whose offsets are computed at
+    // run time.
+    bool IsScalableSlot = RISCVRegisterInfo::isRVVRegClass(RC);
+    if (IsScalableSlot) {
+      if (auto VLen = STI.getRealVLenIfAny()) {
+        Size *= *VLen / RISCV::RVVBitsPerBlock;
+        IsScalableSlot = false;
+      }
+    }
+
     int FrameIdx = MFI.CreateStackObject(Size, Alignment, true);
     MFI.setIsCalleeSavedObjectIndex(FrameIdx, true);
     CS.setFrameIdx(FrameIdx);
-    if (RISCVRegisterInfo::isRVVRegClass(RC))
+    if (IsScalableSlot)
       MFI.setStackID(FrameIdx, TargetStackID::ScalableVector);
   }
 
@@ -2397,6 +2420,12 @@ bool RISCVFrameLowering::isSupportedStackID(TargetStackID::Value ID) const {
 }
 
 TargetStackID::Value RISCVFrameLowering::getStackIDForScalableVectors() const {
+  // A vector object only needs a region of its own because its size is a runtime
+  // quantity. Where the vector length is exactly known it is not, so the object goes in
+  // the ordinary part of the frame and its offset is a constant like any other.
+  if (STI.getRealVLenIfAny())
+    return TargetStackID::Default;
+
   return TargetStackID::ScalableVector;
 }
 

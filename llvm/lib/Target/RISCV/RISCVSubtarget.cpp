@@ -179,6 +179,13 @@ unsigned RISCVSubtarget::getMaxRVVVectorSizeInBits() const {
     report_fatal_error("riscv-v-vector-bits-max specified is lower "
                        "than the Zvl*b limitation");
 
+  // XReviveVec is defined for a machine whose vector length is exactly the
+  // minimum its Zvl states, rather than one that chooses its own. Saying so
+  // here rather than leaving it to a command line option is what keeps the
+  // frame layout free of quantities that are only known at run time.
+  if (RVVVectorBitsMax == 0 && hasVendorXReviveVec())
+    return ZvlLen;
+
   return RVVVectorBitsMax;
 }
 

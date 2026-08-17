@@ -12,8 +12,8 @@ declare i256 @llvm.cttz.i256(i256, i1)
 define i256 @ctpop_i256(i256 %a) {
 ; CHECK-LABEL: ctpop_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wcpop a0, w0
-; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    revive.wcpop a0, v8
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.ctpop.i256(i256 %a)
   ret i256 %r
@@ -22,8 +22,8 @@ define i256 @ctpop_i256(i256 %a) {
 define i256 @ctlz_i256(i256 %a) {
 ; CHECK-LABEL: ctlz_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wclz a0, w0
-; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    revive.wclz a0, v8
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.ctlz.i256(i256 %a, i1 false)
   ret i256 %r
@@ -32,8 +32,8 @@ define i256 @ctlz_i256(i256 %a) {
 define i256 @ctlz_zero_undef_i256(i256 %a) {
 ; CHECK-LABEL: ctlz_zero_undef_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wclz a0, w0
-; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    revive.wclz a0, v8
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.ctlz.i256(i256 %a, i1 true)
   ret i256 %r
@@ -42,8 +42,8 @@ define i256 @ctlz_zero_undef_i256(i256 %a) {
 define i256 @cttz_i256(i256 %a) {
 ; CHECK-LABEL: cttz_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wctz a0, w0
-; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    revive.wctz a0, v8
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.cttz.i256(i256 %a, i1 false)
   ret i256 %r
@@ -52,9 +52,9 @@ define i256 @cttz_i256(i256 %a) {
 define i64 @ctpop_truncated(i256 %a) {
 ; CHECK-LABEL: ctpop_truncated:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wcpop a0, w0
-; CHECK-NEXT:    revive.wzext w0, a0
-; CHECK-NEXT:    revive.wtrunc a0, w0
+; CHECK-NEXT:    revive.wcpop a0, v8
+; CHECK-NEXT:    revive.wzext v8, a0
+; CHECK-NEXT:    revive.wtrunc a0, v8
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.ctpop.i256(i256 %a)
   %t = trunc i256 %r to i64
