@@ -15,6 +15,12 @@
 
 def CSR_ILP32E_LP64E : CalleeSavedRegs<(add X1, X8, X9)>;
 
+// Wide values are what revive keeps live across calls, so half the wide file is
+// callee saved: the caller would otherwise spill and reload every one of them at
+// every call site, where a callee that uses them pays once.
+def CSR_ILP32E_LP64E_XReviveVec
+    : CalleeSavedRegs<(add CSR_ILP32E_LP64E, (sequence "W%u", 8, 15))>;
+
 def CSR_ILP32_LP64
     : CalleeSavedRegs<(add CSR_ILP32E_LP64E, (sequence "X%u", 18, 27))>;
 

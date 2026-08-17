@@ -64,8 +64,11 @@ define i256 @const_negative() {
 define i256 @const_wide() {
 ; CHECK-LABEL: const_wide:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lui a0, %hi(.LCPI6_0)
-; CHECK-NEXT:    revive.wld w0, %lo(.LCPI6_0)(a0)
+; CHECK-NEXT:    li a0, -1
+; CHECK-NEXT:    srli a0, a0, 32
+; CHECK-NEXT:    revive.wzext w0, a0
+; CHECK-NEXT:    li a0, 160
+; CHECK-NEXT:    revive.wsll w0, w0, a0
 ; CHECK-NEXT:    ret
   ret i256 6277101733925179126504886505003981583386072424808101969920
 }

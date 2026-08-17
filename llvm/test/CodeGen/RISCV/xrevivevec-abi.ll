@@ -185,13 +185,16 @@ define i256 @live_across_call(i256 %a, i256 %b) {
 ; RV64E-NEXT:    addi sp, sp, -40
 ; RV64E-NEXT:    .cfi_def_cfa_offset 40
 ; RV64E-NEXT:    sd ra, 32(sp) # 8-byte Folded Spill
+; RV64E-NEXT:    revive.wst w8, 0(sp) # 32-byte Folded Spill
 ; RV64E-NEXT:    .cfi_offset ra, -8
-; RV64E-NEXT:    revive.wst w0, 0(sp) # 32-byte Folded Spill
+; RV64E-NEXT:    .cfi_offset w8, -40
+; RV64E-NEXT:    revive.wmv w8, w0
 ; RV64E-NEXT:    call sink2
-; RV64E-NEXT:    revive.wld w1, 0(sp) # 32-byte Folded Reload
-; RV64E-NEXT:    revive.wadd w0, w0, w1
+; RV64E-NEXT:    revive.wadd w0, w0, w8
 ; RV64E-NEXT:    ld ra, 32(sp) # 8-byte Folded Reload
+; RV64E-NEXT:    revive.wld w8, 0(sp) # 32-byte Folded Reload
 ; RV64E-NEXT:    .cfi_restore ra
+; RV64E-NEXT:    .cfi_restore w8
 ; RV64E-NEXT:    addi sp, sp, 40
 ; RV64E-NEXT:    .cfi_def_cfa_offset 0
 ; RV64E-NEXT:    ret

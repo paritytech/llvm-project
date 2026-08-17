@@ -29,6 +29,15 @@ def SDT_ReviveWiden : SDTypeProfile<1, 1, [SDTCisVT<0, i256>, SDTCisInt<1>]>;
 def riscv_wide_zext : RVSDNode<"WIDE_ZEXT", SDT_ReviveWiden>;
 def riscv_wide_sext : RVSDNode<"WIDE_SEXT", SDT_ReviveWiden>;
 
+// Counting bits. The generic expansions of CTPOP, CTLZ and CTTZ give up at this
+// width and ask for a libcall that does not exist, so each gets an instruction.
+// The result of counting 256 bits fits in an XLen register.
+def SDT_ReviveCount : SDTypeProfile<1, 1, [SDTCisInt<0>, SDTCisVT<1, i256>]>;
+
+def riscv_wide_cpop : RVSDNode<"WIDE_CPOP", SDT_ReviveCount>;
+def riscv_wide_clz : RVSDNode<"WIDE_CLZ", SDT_ReviveCount>;
+def riscv_wide_ctz : RVSDNode<"WIDE_CTZ", SDT_ReviveCount>;
+
 //===----------------------------------------------------------------------===//
 // Encodings
 //===----------------------------------------------------------------------===//
@@ -115,6 +124,9 @@ let isMoveReg = 1 in
 def REVIVE_W_MV    : RVReviveMove<0b0000000, "revive.wmv">;
 def REVIVE_W_BSWAP : RVReviveMove<0b0000010, "revive.wbswap">;
 def REVIVE_W_TRUNC : RVReviveCvtToGPR<0b0000001, "revive.wtrunc">;
+def REVIVE_W_CPOP  : RVReviveCvtToGPR<0b0000011, "revive.wcpop">;
+def REVIVE_W_CLZ   : RVReviveCvtToGPR<0b0000100, "revive.wclz">;
+def REVIVE_W_CTZ   : RVReviveCvtToGPR<0b0000101, "revive.wctz">;
 def REVIVE_W_ZEXT  : RVReviveCvtToWide<0b0000000, "revive.wzext">;
 def REVIVE_W_SEXT  : RVReviveCvtToWide<0b0000001, "revive.wsext">;
 
@@ -128,6 +140,9 @@ def REVIVE_W_ADDMOD : RVReviveR4<0b00, "revive.waddmod">;
 def REVIVE_W_MULMOD : RVReviveR4<0b01, "revive.wmulmod">;
 
 def REVIVE_W_EXP    : RVReviveALU<0b0001010, "revive.wexp">;
+
+// The value to extend comes first and the byte index second, matching the shifts
+// rather than the EVM opcode, whose operands are the other way round.
 def REVIVE_W_SIGNEXT: RVReviveALU<0b0001011, "revive.wsignextend">;
 } // Predicates = [HasVendorXReviveVec]
 } // hasSideEffects = 0, mayLoad = 0, mayStore = 0
@@ -204,6 +219,10 @@ def : Pat<(i256 (sext_inreg (i256 WREG:$rs1), i16)),
           (REVIVE_W_SEXT (SRAI (SLLI (REVIVE_W_TRUNC (i256 WREG:$rs1)), 48), 48))>;
 def : Pat<(i256 (sext_inreg (i256 WREG:$rs1), i8)),
           (REVIVE_W_SEXT (SRAI (SLLI (REVIVE_W_TRUNC (i256 WREG:$rs1)), 56), 56))>;
+
+def : Pat<(XLenVT (riscv_wide_cpop (i256 WREG:$rs1))), (REVIVE_W_CPOP (i256 WREG:$rs1))>;
+def : Pat<(XLenVT (riscv_wide_clz (i256 WREG:$rs1))), (REVIVE_W_CLZ (i256 WREG:$rs1))>;
+def : Pat<(XLenVT (riscv_wide_ctz (i256 WREG:$rs1))), (REVIVE_W_CTZ (i256 WREG:$rs1))>;
 
 def : Pat<(riscv_wide_zext (XLenVT GPR:$rs1)), (REVIVE_W_ZEXT GPR:$rs1)>;
 def : Pat<(riscv_wide_sext (XLenVT GPR:$rs1)), (REVIVE_W_SEXT GPR:$rs1)>;

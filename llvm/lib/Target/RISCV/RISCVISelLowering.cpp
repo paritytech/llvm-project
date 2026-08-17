@@ -363,18 +363,23 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
         setTruncStoreAction(Narrow, Wide, Expand);
     }
 
-    setOperationAction({ISD::SELECT_CC, ISD::BR_CC, ISD::CTLZ, ISD::CTTZ,
-                        ISD::CTPOP, ISD::BITREVERSE, ISD::ROTL,
+    setOperationAction({ISD::SELECT_CC, ISD::BR_CC, ISD::BITREVERSE, ISD::ROTL,
                         ISD::ROTR, ISD::SDIVREM, ISD::UDIVREM, ISD::MULHS,
                         ISD::MULHU, ISD::SMUL_LOHI, ISD::UMUL_LOHI,
                         ISD::UADDO, ISD::USUBO, ISD::SADDO, ISD::SSUBO,
                         ISD::SMULO, ISD::UMULO, ISD::UADDO_CARRY,
                         ISD::USUBO_CARRY,
-                        ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ_ZERO_UNDEF,
                         ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX,
                         ISD::ABS, ISD::SADDSAT, ISD::UADDSAT, ISD::SSUBSAT,
                         ISD::USUBSAT},
                        MVT::i256, Expand);
+
+    // Counting bits cannot be expanded at this width: the generic code gives up
+    // and asks for a libcall that does not exist. Each has an instruction, and
+    // its result is an XLen value that widens back.
+    setOperationAction({ISD::CTPOP, ISD::CTLZ, ISD::CTTZ, ISD::CTLZ_ZERO_UNDEF,
+                        ISD::CTTZ_ZERO_UNDEF},
+                       MVT::i256, Custom);
   }
 
   setOperationAction(ISD::BR_JT, MVT::Other, Expand);
@@ -7159,14 +7164,43 @@ static SDValue lowerWideConstant(SDValue Op, SelectionDAG &DAG,
   // an extend of a constant folds straight back into a wide constant, which
   // would land right back here.
   MVT XLenVT = Subtarget.getXLenVT();
-  if (!ReviveWideConstInReg) {
-    // Fall through to the pool below.
-  } else if (Value.getActiveBits() <= XLenVT.getSizeInBits())
-    return DAG.getNode(RISCVISD::WIDE_ZEXT, DL, VT,
-                       DAG.getConstant(Value.getZExtValue(), DL, XLenVT));
-  else if (Value.getSignificantBits() <= XLenVT.getSizeInBits())
-    return DAG.getNode(RISCVISD::WIDE_SEXT, DL, VT,
-                       DAG.getSignedConstant(Value.getSExtValue(), DL, XLenVT));
+  unsigned XLen = XLenVT.getSizeInBits();
+  if (ReviveWideConstInReg) {
+    if (Value.getActiveBits() <= XLen)
+      return DAG.getNode(RISCVISD::WIDE_ZEXT, DL, VT,
+                         DAG.getConstant(Value.getZExtValue(), DL, XLenVT));
+    if (Value.getSignificantBits() <= XLen)
+      return DAG.getNode(RISCVISD::WIDE_SEXT, DL, VT,
+                         DAG.getSignedConstant(Value.getSExtValue(), DL, XLenVT));
+
+    // A shifted narrow value, which is what most of the rest of an EVM word
+    // pool holds: field masks, `1 << n` bounds, and selectors moved to the top
+    // word. Two instructions and no pool entry, against two to address the pool
+    // and load from it plus the 32 bytes it occupies.
+    unsigned Shift = Value.countr_zero();
+    APInt Narrow = Value.lshr(Shift);
+    if (Narrow.getActiveBits() <= XLen)
+      return DAG.getNode(ISD::SHL, DL, VT,
+                         DAG.getNode(RISCVISD::WIDE_ZEXT, DL, VT,
+                                     DAG.getConstant(Narrow.getZExtValue(), DL,
+                                                     XLenVT)),
+                         DAG.getConstant(Shift, DL, XLenVT));
+
+    // The same for a value whose top run is all ones: a low mask is the whole
+    // word shifted right, and a high mask is it shifted left.
+    unsigned Ones = Value.countr_one();
+    if (Value.lshr(Ones).isZero())
+      return DAG.getNode(ISD::SRL, DL, VT,
+                         DAG.getNode(RISCVISD::WIDE_SEXT, DL, VT,
+                                     DAG.getAllOnesConstant(DL, XLenVT)),
+                         DAG.getConstant(VT.getSizeInBits() - Ones, DL, XLenVT));
+
+    if ((~Value).getActiveBits() <= Shift)
+      return DAG.getNode(ISD::SHL, DL, VT,
+                         DAG.getNode(RISCVISD::WIDE_SEXT, DL, VT,
+                                     DAG.getAllOnesConstant(DL, XLenVT)),
+                         DAG.getConstant(Shift, DL, XLenVT));
+  }
 
   Constant *Pooled = ConstantInt::get(*DAG.getContext(), Value);
   SDValue Addr = DAG.getConstantPool(Pooled, Subtarget.getXLenVT(),
@@ -7175,6 +7209,30 @@ static SDValue lowerWideConstant(SDValue Op, SelectionDAG &DAG,
       VT, DL, DAG.getEntryNode(), Addr,
       MachinePointerInfo::getConstantPool(DAG.getMachineFunction()),
       Align(VT.getStoreSize()));
+}
+
+// Counting the bits of a wide value. The count itself is an XLen quantity, so the
+// instruction produces one and the result widens back.
+static SDValue lowerWideBitCount(SDValue Op, SelectionDAG &DAG,
+                                 const RISCVSubtarget &Subtarget) {
+  unsigned Opcode;
+  switch (Op.getOpcode()) {
+  case ISD::CTPOP:
+    Opcode = RISCVISD::WIDE_CPOP;
+    break;
+  case ISD::CTLZ:
+  case ISD::CTLZ_ZERO_UNDEF:
+    Opcode = RISCVISD::WIDE_CLZ;
+    break;
+  default:
+    Opcode = RISCVISD::WIDE_CTZ;
+    break;
+  }
+
+  SDLoc DL(Op);
+  SDValue Count =
+      DAG.getNode(Opcode, DL, Subtarget.getXLenVT(), Op.getOperand(0));
+  return DAG.getNode(RISCVISD::WIDE_ZEXT, DL, MVT::i256, Count);
 }
 
 static SDValue lowerConstant(SDValue Op, SelectionDAG &DAG,
@@ -8903,8 +8961,11 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
   case ISD::UDIV:
   case ISD::UREM:
   case ISD::BSWAP:
-  case ISD::CTPOP:
   case ISD::VSELECT:
+    return lowerToScalableOp(Op, DAG);
+  case ISD::CTPOP:
+    if (Op.getValueType() == MVT::i256)
+      return lowerWideBitCount(Op, DAG, Subtarget);
     return lowerToScalableOp(Op, DAG);
   case ISD::SHL:
   case ISD::SRL:
@@ -8980,6 +9041,8 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
   case ISD::CTLZ_ZERO_UNDEF:
   case ISD::CTTZ:
   case ISD::CTTZ_ZERO_UNDEF:
+    if (Op.getValueType() == MVT::i256)
+      return lowerWideBitCount(Op, DAG, Subtarget);
     if (Subtarget.hasStdExtZvbb())
       return lowerToScalableOp(Op, DAG);
     assert(Op.getOpcode() != ISD::CTTZ);

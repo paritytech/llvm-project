@@ -101,6 +101,8 @@ RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
     llvm_unreachable("Unrecognized ABI");
   case RISCVABI::ABI_ILP32E:
   case RISCVABI::ABI_LP64E:
+    if (Subtarget.hasVendorXReviveVec())
+      return CSR_ILP32E_LP64E_XReviveVec_SaveList;
     return CSR_ILP32E_LP64E_SaveList;
   case RISCVABI::ABI_ILP32:
   case RISCVABI::ABI_LP64:
@@ -783,6 +785,8 @@ RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & MF,
     llvm_unreachable("Unrecognized ABI");
   case RISCVABI::ABI_ILP32E:
   case RISCVABI::ABI_LP64E:
+    if (Subtarget.hasVendorXReviveVec())
+      return CSR_ILP32E_LP64E_XReviveVec_RegMask;
     return CSR_ILP32E_LP64E_RegMask;
   case RISCVABI::ABI_ILP32:
   case RISCVABI::ABI_LP64:
