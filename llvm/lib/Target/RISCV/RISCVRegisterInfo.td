@@ -802,10 +802,10 @@ def VR : VReg<!listconcat(VM1VTs, VMaskVTs),
 
 def VRNoV0 : VReg<!listconcat(VM1VTs, VMaskVTs), (sub VR, V0), 1>;
 
-def VRM2 : VReg<!listconcat(VM2VTs, [i256]), (add (sequence "V%uM2", 8, 31, 2),
+def VRM2 : VReg<VM2VTs, (add (sequence "V%uM2", 8, 31, 2),
                              (sequence "V%uM2", 6, 0, 2)), 2>;
 
-def VRM2NoV0 : VReg<!listconcat(VM2VTs, [i256]), (sub VRM2, V0M2), 2>;
+def VRM2NoV0 : VReg<VM2VTs, (sub VRM2, V0M2), 2>;
 
 def VRM4 : VReg<VM4VTs, (add V8M4, V12M4, V16M4, V20M4,
                              V24M4, V28M4, V4M4, V0M4), 4>;
@@ -907,3 +907,22 @@ let RegInfos = XLenRI in {
   def TRM2 : RISCVRegisterClass<[untyped], 32, (add (decimate TR, 2))>;
   def TRM4 : RISCVRegisterClass<[untyped], 32, (add (decimate TR, 4))>;
 }
+
+//===----------------------------------------------------------------------===//
+// Wide integer registers (XReviveVec)
+//===----------------------------------------------------------------------===//
+
+// Sixteen registers, each holding one 256-bit EVM word. They are a file of their
+// own rather than an alias of the vector registers, so that enabling the
+// extension makes no vector type legal: nothing else in the backend can then
+// select a vector instruction, and every operation on a wide value is one
+// custom-2 encoding. The Dwarf numbers are the vector file's, which is the
+// register space these occupy on a machine that has both.
+foreach Index = 0-15 in
+  def W#Index : RISCVReg<Index, "w"#Index>,
+                DwarfRegNum<[!add(!mul(Index, 2), 96)]>;
+
+// Spill slots are aligned to XLen rather than to the register width: the target
+// permits unaligned accesses, and demanding 32 bytes would force every function
+// with a wide spill to realign its stack.
+def WREG : RISCVRegisterClass<[i256], 64, (add (sequence "W%u", 0, 15))>;

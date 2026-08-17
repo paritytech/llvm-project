@@ -158,7 +158,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   // With a register class, type legalization stops expanding i256 into i64
   // limbs and the operations below select as single instructions.
   if (Subtarget.hasVendorXReviveVec())
-    addRegisterClass(MVT::i256, &RISCV::VRM2RegClass);
+    addRegisterClass(MVT::i256, &RISCV::WREGRegClass);
 
   static const MVT::SimpleValueType BoolVecVTs[] = {
       MVT::nxv1i1,  MVT::nxv2i1,  MVT::nxv4i1, MVT::nxv8i1,
@@ -352,6 +352,15 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
       // EXTLOAD is left alone: LegalizeDAG asserts it is always supported.
       setLoadExtAction({ISD::SEXTLOAD, ISD::ZEXTLOAD}, MVT::i256, Narrow,
                        Expand);
+
+      // A store of a narrow value into a wider memory type is not a truncation
+      // at all, and the default action for the pair is Legal. Left that way the
+      // store merger builds them out of XLen stores, legalisation splits them
+      // back into XLen stores, and the two never converge. It only becomes
+      // reachable here because a legal i256 makes i128 promote rather than
+      // expand.
+      for (MVT Wide : {MVT::i128, MVT::i256})
+        setTruncStoreAction(Narrow, Wide, Expand);
     }
 
     setOperationAction({ISD::SELECT_CC, ISD::BR_CC, ISD::CTLZ, ISD::CTTZ,
@@ -2460,12 +2469,19 @@ bool RISCVTargetLowering::signExtendConstant(const ConstantInt *CI) const {
   return Subtarget.is64Bit() && CI->getType()->isIntegerTy(32);
 }
 
-// Merging adjacent constant stores into a 256-bit one needs a pool entry and a
-// load where plain XLen stores would do -- and the combiner re-widens the store
-// it just created, which does not terminate.
+// Making i256 legal makes it the widest integer the store merger will reach for,
+// and neither width it then produces is wanted. A 256-bit store of merged
+// constants needs a pool entry and a load where plain XLen stores would do. A
+// narrower one becomes a truncating store of an i256, which has no instruction,
+// so legalisation splits it back into XLen stores -- which the combiner merges
+// again, and the two do not converge.
 bool RISCVTargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                                            const MachineFunction &MF) const {
-  return MemVT != MVT::i256;
+  if (!Subtarget.hasVendorXReviveVec())
+    return true;
+
+  return !MemVT.isScalarInteger() ||
+         MemVT.getSizeInBits() <= Subtarget.getXLen();
 }
 
 bool RISCVTargetLowering::isCheapToSpeculateCttz(Type *Ty) const {
@@ -23634,7 +23650,7 @@ RISCVTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RISCV::Select_FPR32INX_Using_CC_GPR:
   case RISCV::Select_FPR64_Using_CC_GPR:
   case RISCV::Select_FPR64INX_Using_CC_GPR:
-  case RISCV::Select_VRM2_Using_CC_GPR:
+  case RISCV::Select_WREG_Using_CC_GPR:
   case RISCV::Select_FPR64IN32X_Using_CC_GPR:
     return emitSelectPseudo(MI, BB, Subtarget);
   case RISCV::BuildPairF64Pseudo:

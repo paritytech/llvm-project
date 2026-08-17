@@ -8,7 +8,7 @@
 define i256 @add_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: add_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    revive.wadd w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = add i256 %a, %b
   ret i256 %r
@@ -17,7 +17,7 @@ define i256 @add_i256(i256 %a, i256 %b) {
 define i256 @sub_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: sub_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wsub v8, v8, v10
+; CHECK-NEXT:    revive.wsub w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = sub i256 %a, %b
   ret i256 %r
@@ -26,7 +26,7 @@ define i256 @sub_i256(i256 %a, i256 %b) {
 define i256 @mul_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: mul_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wmul v8, v8, v10
+; CHECK-NEXT:    revive.wmul w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = mul i256 %a, %b
   ret i256 %r
@@ -35,7 +35,7 @@ define i256 @mul_i256(i256 %a, i256 %b) {
 define i256 @and_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: and_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wand v8, v8, v10
+; CHECK-NEXT:    revive.wand w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = and i256 %a, %b
   ret i256 %r
@@ -44,7 +44,7 @@ define i256 @and_i256(i256 %a, i256 %b) {
 define i256 @or_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: or_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wor v8, v8, v10
+; CHECK-NEXT:    revive.wor w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = or i256 %a, %b
   ret i256 %r
@@ -53,7 +53,7 @@ define i256 @or_i256(i256 %a, i256 %b) {
 define i256 @xor_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: xor_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wxor v8, v8, v10
+; CHECK-NEXT:    revive.wxor w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = xor i256 %a, %b
   ret i256 %r
@@ -62,7 +62,7 @@ define i256 @xor_i256(i256 %a, i256 %b) {
 define i256 @udiv_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: udiv_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wdivu v8, v8, v10
+; CHECK-NEXT:    revive.wdivu w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = udiv i256 %a, %b
   ret i256 %r
@@ -71,7 +71,7 @@ define i256 @udiv_i256(i256 %a, i256 %b) {
 define i256 @sdiv_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: sdiv_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wdiv v8, v8, v10
+; CHECK-NEXT:    revive.wdiv w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = sdiv i256 %a, %b
   ret i256 %r
@@ -80,7 +80,7 @@ define i256 @sdiv_i256(i256 %a, i256 %b) {
 define i256 @urem_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: urem_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wremu v8, v8, v10
+; CHECK-NEXT:    revive.wremu w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = urem i256 %a, %b
   ret i256 %r
@@ -89,7 +89,7 @@ define i256 @urem_i256(i256 %a, i256 %b) {
 define i256 @srem_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: srem_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wrem v8, v8, v10
+; CHECK-NEXT:    revive.wrem w0, w0, w1
 ; CHECK-NEXT:    ret
   %r = srem i256 %a, %b
   ret i256 %r
@@ -98,8 +98,8 @@ define i256 @srem_i256(i256 %a, i256 %b) {
 define i256 @shl_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: shl_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wtrunc a0, v10
-; CHECK-NEXT:    revive.wsll v8, v8, a0
+; CHECK-NEXT:    revive.wtrunc a0, w1
+; CHECK-NEXT:    revive.wsll w0, w0, a0
 ; CHECK-NEXT:    ret
   %r = shl i256 %a, %b
   ret i256 %r
@@ -108,7 +108,7 @@ define i256 @shl_i256(i256 %a, i256 %b) {
 define i256 @shl_i256_narrow(i256 %a, i64 %b) {
 ; CHECK-LABEL: shl_i256_narrow:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wsll v8, v8, a0
+; CHECK-NEXT:    revive.wsll w0, w0, a0
 ; CHECK-NEXT:    ret
   %w = zext i64 %b to i256
   %r = shl i256 %a, %w
@@ -118,8 +118,8 @@ define i256 @shl_i256_narrow(i256 %a, i64 %b) {
 define i256 @lshr_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: lshr_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wtrunc a0, v10
-; CHECK-NEXT:    revive.wsrl v8, v8, a0
+; CHECK-NEXT:    revive.wtrunc a0, w1
+; CHECK-NEXT:    revive.wsrl w0, w0, a0
 ; CHECK-NEXT:    ret
   %r = lshr i256 %a, %b
   ret i256 %r
@@ -128,7 +128,7 @@ define i256 @lshr_i256(i256 %a, i256 %b) {
 define i256 @lshr_i256_narrow(i256 %a, i64 %b) {
 ; CHECK-LABEL: lshr_i256_narrow:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wsrl v8, v8, a0
+; CHECK-NEXT:    revive.wsrl w0, w0, a0
 ; CHECK-NEXT:    ret
   %w = zext i64 %b to i256
   %r = lshr i256 %a, %w
@@ -138,8 +138,8 @@ define i256 @lshr_i256_narrow(i256 %a, i64 %b) {
 define i256 @ashr_i256(i256 %a, i256 %b) {
 ; CHECK-LABEL: ashr_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wtrunc a0, v10
-; CHECK-NEXT:    revive.wsra v8, v8, a0
+; CHECK-NEXT:    revive.wtrunc a0, w1
+; CHECK-NEXT:    revive.wsra w0, w0, a0
 ; CHECK-NEXT:    ret
   %r = ashr i256 %a, %b
   ret i256 %r
@@ -148,7 +148,7 @@ define i256 @ashr_i256(i256 %a, i256 %b) {
 define i256 @ashr_i256_narrow(i256 %a, i64 %b) {
 ; CHECK-LABEL: ashr_i256_narrow:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.wsra v8, v8, a0
+; CHECK-NEXT:    revive.wsra w0, w0, a0
 ; CHECK-NEXT:    ret
   %w = zext i64 %b to i256
   %r = ashr i256 %a, %w

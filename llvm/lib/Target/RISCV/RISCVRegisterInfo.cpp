@@ -139,10 +139,7 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   markSuperRegs(Reserved, RISCV::X2_H); // sp
   markSuperRegs(Reserved, RISCV::X3_H); // gp
   markSuperRegs(Reserved, RISCV::X4_H); // tp
-  // Wide spill slots appear during register allocation, after this point, and
-  // make hasFP flip to true. Reserve FP up front rather than depending on a
-  // decision that can still change; emitPrologue asserts otherwise.
-  if (TFI->hasFP(MF) || Subtarget.hasVendorXReviveVec())
+  if (TFI->hasFP(MF))
     markSuperRegs(Reserved, RISCV::X8_H); // fp
   // Reserve the base register if we need to realign the stack and allocate
   // variable-sized objects at runtime.

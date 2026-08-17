@@ -60,6 +60,11 @@ static const MCPhysReg ArgVRs[] = {
 static const MCPhysReg ArgVRM2s[] = {RISCV::V8M2,  RISCV::V10M2, RISCV::V12M2,
                                      RISCV::V14M2, RISCV::V16M2, RISCV::V18M2,
                                      RISCV::V20M2, RISCV::V22M2};
+// The wide file is entirely caller-saved, so the first half carries arguments
+// and returns and the second half is left for values live across a call.
+static const MCPhysReg ArgWRegs[] = {RISCV::W0, RISCV::W1, RISCV::W2,
+                                     RISCV::W3, RISCV::W4, RISCV::W5,
+                                     RISCV::W6, RISCV::W7};
 static const MCPhysReg ArgVRM4s[] = {RISCV::V8M4, RISCV::V12M4, RISCV::V16M4,
                                      RISCV::V20M4};
 static const MCPhysReg ArgVRM8s[] = {RISCV::V8M8, RISCV::V16M8};
@@ -485,12 +490,14 @@ bool llvm::CC_RISCV(unsigned ValNo, MVT ValVT, MVT LocVT,
   // ~112 bytes of marshalling per call site. Split arguments keep to the generic
   // path, which owns the pending-location bookkeeping.
   if (LocVT == MVT::i256 && !ArgFlags.isSplit() && PendingLocs.empty()) {
-    if (MCRegister Reg = State.AllocateReg(ArgVRM2s)) {
+    if (MCRegister Reg = State.AllocateReg(ArgWRegs)) {
       State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
       return false;
     }
-    // Out of registers: the stack slot must be as aligned as the type.
-    unsigned Offset = State.AllocateStack(32, Align(32));
+    // Out of registers. The slot is XLen-aligned rather than type-aligned:
+    // the wide accesses do not require alignment, and asking for 32 bytes
+    // would realign the stack of every function that runs out of them.
+    unsigned Offset = State.AllocateStack(32, Align(8));
     State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
     return false;
   }
@@ -644,11 +651,11 @@ bool llvm::CC_RISCV_FastCC(unsigned ValNo, MVT ValVT, MVT LocVT,
   // As above. revive gives its internal functions fastcc, so most i256
   // arguments actually take this path.
   if (LocVT == MVT::i256 && !ArgFlags.isSplit()) {
-    if (MCRegister Reg = State.AllocateReg(ArgVRM2s)) {
+    if (MCRegister Reg = State.AllocateReg(ArgWRegs)) {
       State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
       return false;
     }
-    unsigned Offset = State.AllocateStack(32, Align(32));
+    unsigned Offset = State.AllocateStack(32, Align(8));
     State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
     return false;
   }

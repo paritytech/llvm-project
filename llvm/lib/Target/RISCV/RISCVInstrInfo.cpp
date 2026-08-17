@@ -518,6 +518,12 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     return;
   }
 
+  if (RISCV::WREGRegClass.contains(DstReg, SrcReg)) {
+    BuildMI(MBB, MBBI, DL, get(RISCV::REVIVE_W_MV), DstReg)
+        .addReg(SrcReg, KillFlag | getRenamableRegState(RenamableSrc));
+    return;
+  }
+
   if (RISCV::GPRF16RegClass.contains(DstReg, SrcReg)) {
     BuildMI(MBB, MBBI, DL, get(RISCV::PseudoMV_FPR16INX), DstReg)
         .addReg(SrcReg, KillFlag | getRenamableRegState(RenamableSrc));
@@ -658,6 +664,10 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   if (RISCV::GPRRegClass.hasSubClassEq(RC)) {
     Opcode = RegInfo.getRegSizeInBits(RISCV::GPRRegClass) == 32 ? RISCV::SW
                                                                 : RISCV::SD;
+  } else if (RISCV::WREGRegClass.hasSubClassEq(RC)) {
+    // A wide slot is a plain 32-byte stack object, not a scalable one, so the
+    // fixed-offset path below addresses it without querying the vector length.
+    Opcode = RISCV::REVIVE_W_ST;
   } else if (RISCV::GPRF16RegClass.hasSubClassEq(RC)) {
     Opcode = RISCV::SH_INX;
   } else if (RISCV::GPRF32RegClass.hasSubClassEq(RC)) {
@@ -750,6 +760,8 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   if (RISCV::GPRRegClass.hasSubClassEq(RC)) {
     Opcode = RegInfo.getRegSizeInBits(RISCV::GPRRegClass) == 32 ? RISCV::LW
                                                                 : RISCV::LD;
+  } else if (RISCV::WREGRegClass.hasSubClassEq(RC)) {
+    Opcode = RISCV::REVIVE_W_LD;
   } else if (RISCV::GPRF16RegClass.hasSubClassEq(RC)) {
     Opcode = RISCV::LH_INX;
   } else if (RISCV::GPRF32RegClass.hasSubClassEq(RC)) {

@@ -4,7 +4,7 @@
 ; RUN: llc -mtriple=riscv64 -mattr=+e,+m,+xrevivevec -target-abi lp64e \
 ; RUN:   -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,RV64E
 
-; Wide arguments travel in vector registers instead of by reference, so a call
+; Wide arguments travel in the wide registers instead of by reference, so a call
 ; needs no marshalling at all.
 
 declare i256 @sink2(i256, i256)
@@ -12,19 +12,10 @@ declare i256 @sink3(i256, i256, i256)
 declare fastcc i256 @fast_sink(i256, i256)
 
 define i256 @arg_passthrough(i256 %a, i256 %b) {
-; RV64I-LABEL: arg_passthrough:
-; RV64I:       # %bb.0:
-; RV64I-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; RV64I-NEXT:    vmv2r.v v8, v10
-; RV64I-NEXT:    ret
-;
-; RV64E-LABEL: arg_passthrough:
-; RV64E:       # %bb.0:
-; RV64E-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; RV64E-NEXT:    vmv2r.v v8, v10
-; RV64E-NEXT:    mv sp, s0
-; RV64E-NEXT:    .cfi_def_cfa sp, 0
-; RV64E-NEXT:    ret
+; CHECK-LABEL: arg_passthrough:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    revive.wmv w0, w1
+; CHECK-NEXT:    ret
   ret i256 %b
 }
 
@@ -44,19 +35,14 @@ define i256 @call_two(i256 %a, i256 %b) {
 ;
 ; RV64E-LABEL: call_two:
 ; RV64E:       # %bb.0:
-; RV64E-NEXT:    addi sp, sp, -16
-; RV64E-NEXT:    .cfi_def_cfa_offset 16
-; RV64E-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
+; RV64E-NEXT:    addi sp, sp, -8
+; RV64E-NEXT:    .cfi_def_cfa_offset 8
+; RV64E-NEXT:    sd ra, 0(sp) # 8-byte Folded Spill
 ; RV64E-NEXT:    .cfi_offset ra, -8
-; RV64E-NEXT:    addi s0, sp, 16
-; RV64E-NEXT:    .cfi_def_cfa s0, 0
-; RV64E-NEXT:    andi sp, sp, -16
 ; RV64E-NEXT:    call sink2
-; RV64E-NEXT:    addi sp, s0, -16
-; RV64E-NEXT:    .cfi_def_cfa sp, 16
-; RV64E-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
+; RV64E-NEXT:    ld ra, 0(sp) # 8-byte Folded Reload
 ; RV64E-NEXT:    .cfi_restore ra
-; RV64E-NEXT:    addi sp, sp, 16
+; RV64E-NEXT:    addi sp, sp, 8
 ; RV64E-NEXT:    .cfi_def_cfa_offset 0
 ; RV64E-NEXT:    ret
   %r = call i256 @sink2(i256 %a, i256 %b)
@@ -79,19 +65,14 @@ define i256 @call_three(i256 %a, i256 %b, i256 %c) {
 ;
 ; RV64E-LABEL: call_three:
 ; RV64E:       # %bb.0:
-; RV64E-NEXT:    addi sp, sp, -16
-; RV64E-NEXT:    .cfi_def_cfa_offset 16
-; RV64E-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
+; RV64E-NEXT:    addi sp, sp, -8
+; RV64E-NEXT:    .cfi_def_cfa_offset 8
+; RV64E-NEXT:    sd ra, 0(sp) # 8-byte Folded Spill
 ; RV64E-NEXT:    .cfi_offset ra, -8
-; RV64E-NEXT:    addi s0, sp, 16
-; RV64E-NEXT:    .cfi_def_cfa s0, 0
-; RV64E-NEXT:    andi sp, sp, -16
 ; RV64E-NEXT:    call sink3
-; RV64E-NEXT:    addi sp, s0, -16
-; RV64E-NEXT:    .cfi_def_cfa sp, 16
-; RV64E-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
+; RV64E-NEXT:    ld ra, 0(sp) # 8-byte Folded Reload
 ; RV64E-NEXT:    .cfi_restore ra
-; RV64E-NEXT:    addi sp, sp, 16
+; RV64E-NEXT:    addi sp, sp, 8
 ; RV64E-NEXT:    .cfi_def_cfa_offset 0
 ; RV64E-NEXT:    ret
   %r = call i256 @sink3(i256 %a, i256 %b, i256 %c)
@@ -115,19 +96,14 @@ define i256 @call_fastcc(i256 %a, i256 %b) {
 ;
 ; RV64E-LABEL: call_fastcc:
 ; RV64E:       # %bb.0:
-; RV64E-NEXT:    addi sp, sp, -16
-; RV64E-NEXT:    .cfi_def_cfa_offset 16
-; RV64E-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
+; RV64E-NEXT:    addi sp, sp, -8
+; RV64E-NEXT:    .cfi_def_cfa_offset 8
+; RV64E-NEXT:    sd ra, 0(sp) # 8-byte Folded Spill
 ; RV64E-NEXT:    .cfi_offset ra, -8
-; RV64E-NEXT:    addi s0, sp, 16
-; RV64E-NEXT:    .cfi_def_cfa s0, 0
-; RV64E-NEXT:    andi sp, sp, -16
 ; RV64E-NEXT:    call fast_sink
-; RV64E-NEXT:    addi sp, s0, -16
-; RV64E-NEXT:    .cfi_def_cfa sp, 16
-; RV64E-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
+; RV64E-NEXT:    ld ra, 0(sp) # 8-byte Folded Reload
 ; RV64E-NEXT:    .cfi_restore ra
-; RV64E-NEXT:    addi sp, sp, 16
+; RV64E-NEXT:    addi sp, sp, 8
 ; RV64E-NEXT:    .cfi_def_cfa_offset 0
 ; RV64E-NEXT:    ret
   %r = call fastcc i256 @fast_sink(i256 %a, i256 %b)
@@ -138,44 +114,49 @@ define i256 @call_fastcc(i256 %a, i256 %b) {
 ; stack, which must be aligned to the type.
 declare i256 @sink10(i256, i256, i256, i256, i256, i256, i256, i256, i256, i256)
 define i256 @call_ten(i256 %a) {
-; CHECK-LABEL: call_ten:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi sp, sp, -32
-; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    .cfi_offset s0, -16
-; CHECK-NEXT:    .cfi_offset s1, -24
-; CHECK-NEXT:    addi s0, sp, 32
-; CHECK-NEXT:    .cfi_def_cfa s0, 0
-; CHECK-NEXT:    andi sp, sp, -32
-; CHECK-NEXT:    mv s1, sp
-; CHECK-NEXT:    addi sp, sp, -64
-; CHECK-NEXT:    revive.wst v8, 32(sp)
-; CHECK-NEXT:    revive.wst v8, 0(sp)
-; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; CHECK-NEXT:    vmv2r.v v10, v8
-; CHECK-NEXT:    vmv2r.v v12, v8
-; CHECK-NEXT:    vmv2r.v v14, v8
-; CHECK-NEXT:    vmv2r.v v16, v8
-; CHECK-NEXT:    vmv2r.v v18, v8
-; CHECK-NEXT:    vmv2r.v v20, v8
-; CHECK-NEXT:    vmv2r.v v22, v8
-; CHECK-NEXT:    call sink10
-; CHECK-NEXT:    addi sp, sp, 64
-; CHECK-NEXT:    addi sp, s0, -32
-; CHECK-NEXT:    .cfi_def_cfa sp, 32
-; CHECK-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    .cfi_restore ra
-; CHECK-NEXT:    .cfi_restore s0
-; CHECK-NEXT:    .cfi_restore s1
-; CHECK-NEXT:    addi sp, sp, 32
-; CHECK-NEXT:    .cfi_def_cfa_offset 0
-; CHECK-NEXT:    ret
+; RV64I-LABEL: call_ten:
+; RV64I:       # %bb.0:
+; RV64I-NEXT:    addi sp, sp, -80
+; RV64I-NEXT:    .cfi_def_cfa_offset 80
+; RV64I-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
+; RV64I-NEXT:    .cfi_offset ra, -8
+; RV64I-NEXT:    revive.wst w0, 32(sp)
+; RV64I-NEXT:    revive.wst w0, 0(sp)
+; RV64I-NEXT:    revive.wmv w1, w0
+; RV64I-NEXT:    revive.wmv w2, w0
+; RV64I-NEXT:    revive.wmv w3, w0
+; RV64I-NEXT:    revive.wmv w4, w0
+; RV64I-NEXT:    revive.wmv w5, w0
+; RV64I-NEXT:    revive.wmv w6, w0
+; RV64I-NEXT:    revive.wmv w7, w0
+; RV64I-NEXT:    call sink10
+; RV64I-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
+; RV64I-NEXT:    .cfi_restore ra
+; RV64I-NEXT:    addi sp, sp, 80
+; RV64I-NEXT:    .cfi_def_cfa_offset 0
+; RV64I-NEXT:    ret
+;
+; RV64E-LABEL: call_ten:
+; RV64E:       # %bb.0:
+; RV64E-NEXT:    addi sp, sp, -72
+; RV64E-NEXT:    .cfi_def_cfa_offset 72
+; RV64E-NEXT:    sd ra, 64(sp) # 8-byte Folded Spill
+; RV64E-NEXT:    .cfi_offset ra, -8
+; RV64E-NEXT:    revive.wst w0, 32(sp)
+; RV64E-NEXT:    revive.wst w0, 0(sp)
+; RV64E-NEXT:    revive.wmv w1, w0
+; RV64E-NEXT:    revive.wmv w2, w0
+; RV64E-NEXT:    revive.wmv w3, w0
+; RV64E-NEXT:    revive.wmv w4, w0
+; RV64E-NEXT:    revive.wmv w5, w0
+; RV64E-NEXT:    revive.wmv w6, w0
+; RV64E-NEXT:    revive.wmv w7, w0
+; RV64E-NEXT:    call sink10
+; RV64E-NEXT:    ld ra, 64(sp) # 8-byte Folded Reload
+; RV64E-NEXT:    .cfi_restore ra
+; RV64E-NEXT:    addi sp, sp, 72
+; RV64E-NEXT:    .cfi_def_cfa_offset 0
+; RV64E-NEXT:    ret
   %r = call i256 @sink10(i256 %a, i256 %a, i256 %a, i256 %a, i256 %a,
                          i256 %a, i256 %a, i256 %a, i256 %a, i256 %a)
   ret i256 %r
@@ -189,20 +170,10 @@ define i256 @live_across_call(i256 %a, i256 %b) {
 ; RV64I-NEXT:    .cfi_def_cfa_offset 48
 ; RV64I-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
 ; RV64I-NEXT:    .cfi_offset ra, -8
-; RV64I-NEXT:    csrr a0, vlenb
-; RV64I-NEXT:    slli a0, a0, 1
-; RV64I-NEXT:    sub sp, sp, a0
-; RV64I-NEXT:    .cfi_escape 0x0f, 0x0d, 0x72, 0x00, 0x11, 0x30, 0x22, 0x11, 0x02, 0x92, 0xa2, 0x38, 0x00, 0x1e, 0x22 # sp + 48 + 2 * vlenb
-; RV64I-NEXT:    addi a0, sp, 32
-; RV64I-NEXT:    vs2r.v v8, (a0) # vscale x 16-byte Folded Spill
+; RV64I-NEXT:    revive.wst w0, 8(sp) # 32-byte Folded Spill
 ; RV64I-NEXT:    call sink2
-; RV64I-NEXT:    addi a0, sp, 32
-; RV64I-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
-; RV64I-NEXT:    revive.wadd v8, v8, v10
-; RV64I-NEXT:    csrr a0, vlenb
-; RV64I-NEXT:    slli a0, a0, 1
-; RV64I-NEXT:    add sp, sp, a0
-; RV64I-NEXT:    .cfi_def_cfa sp, 48
+; RV64I-NEXT:    revive.wld w1, 8(sp) # 32-byte Folded Reload
+; RV64I-NEXT:    revive.wadd w0, w0, w1
 ; RV64I-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
 ; RV64I-NEXT:    .cfi_restore ra
 ; RV64I-NEXT:    addi sp, sp, 48
@@ -215,20 +186,10 @@ define i256 @live_across_call(i256 %a, i256 %b) {
 ; RV64E-NEXT:    .cfi_def_cfa_offset 40
 ; RV64E-NEXT:    sd ra, 32(sp) # 8-byte Folded Spill
 ; RV64E-NEXT:    .cfi_offset ra, -8
-; RV64E-NEXT:    addi s0, sp, 40
-; RV64E-NEXT:    .cfi_def_cfa s0, 0
-; RV64E-NEXT:    csrr a0, vlenb
-; RV64E-NEXT:    slli a0, a0, 1
-; RV64E-NEXT:    sub sp, sp, a0
-; RV64E-NEXT:    andi sp, sp, -16
-; RV64E-NEXT:    addi a0, sp, 32
-; RV64E-NEXT:    vs2r.v v8, (a0) # vscale x 16-byte Folded Spill
+; RV64E-NEXT:    revive.wst w0, 0(sp) # 32-byte Folded Spill
 ; RV64E-NEXT:    call sink2
-; RV64E-NEXT:    addi a0, sp, 32
-; RV64E-NEXT:    vl2r.v v10, (a0) # vscale x 16-byte Folded Reload
-; RV64E-NEXT:    revive.wadd v8, v8, v10
-; RV64E-NEXT:    addi sp, s0, -40
-; RV64E-NEXT:    .cfi_def_cfa sp, 40
+; RV64E-NEXT:    revive.wld w1, 0(sp) # 32-byte Folded Reload
+; RV64E-NEXT:    revive.wadd w0, w0, w1
 ; RV64E-NEXT:    ld ra, 32(sp) # 8-byte Folded Reload
 ; RV64E-NEXT:    .cfi_restore ra
 ; RV64E-NEXT:    addi sp, sp, 40
