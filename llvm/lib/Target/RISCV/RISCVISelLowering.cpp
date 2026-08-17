@@ -17755,6 +17755,11 @@ combineVectorSizedSetCCEquality(EVT VT, SDValue X, SDValue Y, ISD::CondCode CC,
   if (!OpVT.isScalarInteger())
     return SDValue();
 
+  // A comparison at a type the target has a register class for is a single
+  // instruction, and there is nothing here for type legalization to split up.
+  if (DAG.getTargetLoweringInfo().isTypeLegal(OpVT))
+    return SDValue();
+
   unsigned OpSize = OpVT.getSizeInBits();
   // The size should be larger than XLen and smaller than the maximum vector
   // size.
