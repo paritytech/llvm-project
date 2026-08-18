@@ -105,6 +105,10 @@ private:
 
   unsigned XSfmmTE = 0;
   unsigned ZvlLen = 0;
+
+  /// The vector register width XReviveVec is defined for. The extension does
+  /// not imply the vector extensions, so this cannot come from a Zvl feature.
+  static constexpr unsigned XReviveVecVectorLengthBits = 128;
   unsigned RVVVectorBitsMin;
   unsigned RVVVectorBitsMax;
   uint8_t MaxInterleaveFactor = 2;
@@ -269,9 +273,10 @@ public:
 
   // As above, but also answers for a subtarget with no vector extension at all, which
   // has no vector length rather than an unknown one. Callers that run for every function
-  // regardless of the extensions in force want this one.
+  // regardless of the extensions in force want this one. XReviveVec holds wide values in
+  // vector register pairs without implying the vector extensions, so it answers too.
   std::optional<unsigned> getRealVLenIfAny() const {
-    if (!hasVInstructions())
+    if (!hasVInstructions() && !hasVendorXReviveVec())
       return std::nullopt;
     return getRealVLen();
   }

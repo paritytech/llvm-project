@@ -10,8 +10,7 @@ define i256 @select_i256(i256 %a, i256 %b, i64 %c) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    beqz a0, .LBB0_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; CHECK-NEXT:    vmv2r.v v8, v10
+; CHECK-NEXT:    revive.wmv v8, v10
 ; CHECK-NEXT:  .LBB0_2:
 ; CHECK-NEXT:    ret
   %t = icmp eq i64 %c, 0
@@ -25,8 +24,7 @@ define i256 @select_wide_cond(i256 %a, i256 %b) {
 ; CHECK-NEXT:    revive.wsltu a0, v8, v10
 ; CHECK-NEXT:    bnez a0, .LBB1_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; CHECK-NEXT:    vmv2r.v v8, v10
+; CHECK-NEXT:    revive.wmv v8, v10
 ; CHECK-NEXT:  .LBB1_2:
 ; CHECK-NEXT:    ret
   %t = icmp ult i256 %a, %b

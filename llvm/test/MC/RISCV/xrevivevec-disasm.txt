@@ -73,6 +73,9 @@
 # CHECK: revive.wsignextend	v8, v8, v10
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0xa4,0x16
+# CHECK: revive.wmv	v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x64,0x05,0x00
 # CHECK: revive.wbswap	v8, v8
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x64,0x04,0x04

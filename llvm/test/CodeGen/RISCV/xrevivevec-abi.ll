@@ -14,8 +14,7 @@ declare fastcc i256 @fast_sink(i256, i256)
 define i256 @arg_passthrough(i256 %a, i256 %b) {
 ; CHECK-LABEL: arg_passthrough:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; CHECK-NEXT:    vmv2r.v v8, v10
+; CHECK-NEXT:    revive.wmv v8, v10
 ; CHECK-NEXT:    ret
   ret i256 %b
 }
@@ -123,14 +122,13 @@ define i256 @call_ten(i256 %a) {
 ; RV64I-NEXT:    .cfi_offset ra, -8
 ; RV64I-NEXT:    revive.wst v8, 32(sp)
 ; RV64I-NEXT:    revive.wst v8, 0(sp)
-; RV64I-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; RV64I-NEXT:    vmv2r.v v10, v8
-; RV64I-NEXT:    vmv2r.v v12, v8
-; RV64I-NEXT:    vmv2r.v v14, v8
-; RV64I-NEXT:    vmv2r.v v16, v8
-; RV64I-NEXT:    vmv2r.v v18, v8
-; RV64I-NEXT:    vmv2r.v v20, v8
-; RV64I-NEXT:    vmv2r.v v22, v8
+; RV64I-NEXT:    revive.wmv v10, v8
+; RV64I-NEXT:    revive.wmv v12, v8
+; RV64I-NEXT:    revive.wmv v14, v8
+; RV64I-NEXT:    revive.wmv v16, v8
+; RV64I-NEXT:    revive.wmv v18, v8
+; RV64I-NEXT:    revive.wmv v20, v8
+; RV64I-NEXT:    revive.wmv v22, v8
 ; RV64I-NEXT:    call sink10
 ; RV64I-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
 ; RV64I-NEXT:    .cfi_restore ra
@@ -146,14 +144,13 @@ define i256 @call_ten(i256 %a) {
 ; RV64E-NEXT:    .cfi_offset ra, -8
 ; RV64E-NEXT:    revive.wst v8, 32(sp)
 ; RV64E-NEXT:    revive.wst v8, 0(sp)
-; RV64E-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; RV64E-NEXT:    vmv2r.v v10, v8
-; RV64E-NEXT:    vmv2r.v v12, v8
-; RV64E-NEXT:    vmv2r.v v14, v8
-; RV64E-NEXT:    vmv2r.v v16, v8
-; RV64E-NEXT:    vmv2r.v v18, v8
-; RV64E-NEXT:    vmv2r.v v20, v8
-; RV64E-NEXT:    vmv2r.v v22, v8
+; RV64E-NEXT:    revive.wmv v10, v8
+; RV64E-NEXT:    revive.wmv v12, v8
+; RV64E-NEXT:    revive.wmv v14, v8
+; RV64E-NEXT:    revive.wmv v16, v8
+; RV64E-NEXT:    revive.wmv v18, v8
+; RV64E-NEXT:    revive.wmv v20, v8
+; RV64E-NEXT:    revive.wmv v22, v8
 ; RV64E-NEXT:    call sink10
 ; RV64E-NEXT:    ld ra, 64(sp) # 8-byte Folded Reload
 ; RV64E-NEXT:    .cfi_restore ra
@@ -191,8 +188,7 @@ define i256 @live_across_call(i256 %a, i256 %b) {
 ; RV64E-NEXT:    revive.wst v24, 0(sp) # 32-byte Folded Spill
 ; RV64E-NEXT:    .cfi_offset ra, -8
 ; RV64E-NEXT:    .cfi_offset v24, -40
-; RV64E-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; RV64E-NEXT:    vmv2r.v v24, v8
+; RV64E-NEXT:    revive.wmv v24, v8
 ; RV64E-NEXT:    call sink2
 ; RV64E-NEXT:    revive.wadd v8, v8, v24
 ; RV64E-NEXT:    ld ra, 32(sp) # 8-byte Folded Reload

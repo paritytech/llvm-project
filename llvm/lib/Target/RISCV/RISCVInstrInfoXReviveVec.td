@@ -123,6 +123,7 @@ def REVIVE_W_SLT  : RVReviveCmp<0b0000011, "revive.wslt">;
 // Moves and conversions
 //===----------------------------------------------------------------------===//
 
+def REVIVE_W_MV    : RVReviveMove<0b0000000, "revive.wmv">;
 def REVIVE_W_BSWAP : RVReviveMove<0b0000010, "revive.wbswap">;
 def REVIVE_W_TRUNC : RVReviveCvtToGPR<0b0000001, "revive.wtrunc">;
 def REVIVE_W_CPOP  : RVReviveCvtToGPR<0b0000011, "revive.wcpop">;

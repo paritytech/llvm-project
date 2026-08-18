@@ -1156,11 +1156,13 @@ def HasVendorXTHeadBs : Predicate<"Subtarget->hasVendorXTHeadBs()">,
 
 // 256-bit integers as a machine type, so they are never expanded into limb
 // chains. Wide values live in the vector registers, two to a value at LMUL=2,
-// so the extension implies the vector extensions that provide them.
+// but the extension implies nothing: no vector type becomes legal on its
+// account and no standard vector instruction can be selected. The registers
+// and their pairing are the vector specification's; every instruction that
+// touches them here is the extension's own.
 def FeatureVendorXReviveVec
     : RISCVExtension<1, 0,
-                     "revive 256-bit wide integer instructions",
-                     [FeatureStdExtZve64x, FeatureStdExtZvl128b]>;
+                     "revive 256-bit wide integer instructions">;
 def HasVendorXReviveVec : Predicate<"Subtarget->hasVendorXReviveVec()">,
                           AssemblerPredicate<(all_of FeatureVendorXReviveVec),
                               "'XReviveVec' (revive 256-bit wide integer instructions)">;

@@ -67,25 +67,23 @@ define i256 @copy_is_one_instruction(i256 %a, i256 %b, i1 %cond) {
 ; CHECK-LABEL: copy_is_one_instruction:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    andi a0, a0, 1
-; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; CHECK-NEXT:    vmv2r.v v12, v8
+; CHECK-NEXT:    revive.wmv v12, v8
 ; CHECK-NEXT:    beqz a0, .LBB1_2
 ; CHECK-NEXT:  # %bb.1: # %then
 ; CHECK-NEXT:    addi sp, sp, -16
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    vmv2r.v v8, v10
-; CHECK-NEXT:    vmv2r.v v10, v12
+; CHECK-NEXT:    revive.wmv v8, v10
+; CHECK-NEXT:    revive.wmv v10, v12
 ; CHECK-NEXT:    call opaque
-; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
-; CHECK-NEXT:    vmv2r.v v12, v8
+; CHECK-NEXT:    revive.wmv v12, v8
 ; CHECK-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
 ; CHECK-NEXT:    addi sp, sp, 16
 ; CHECK-NEXT:    .cfi_def_cfa_offset 0
 ; CHECK-NEXT:  .LBB1_2: # %join
-; CHECK-NEXT:    vmv2r.v v8, v12
+; CHECK-NEXT:    revive.wmv v8, v12
 ; CHECK-NEXT:    ret
   br i1 %cond, label %then, label %else
 

@@ -170,6 +170,13 @@ unsigned RISCVSubtarget::getMaxBuildIntsCost() const {
 }
 
 unsigned RISCVSubtarget::getMaxRVVVectorSizeInBits() const {
+  // XReviveVec is defined for a machine whose vector registers are exactly 128
+  // bits: a wide register is a pair of them. The extension does not imply the
+  // vector extensions, so the length is stated here rather than taken from a
+  // Zvl feature, and no command line option changes it.
+  if (hasVendorXReviveVec())
+    return XReviveVecVectorLengthBits;
+
   assert(hasVInstructions() &&
          "Tried to get vector length without Zve or V extension support!");
 
@@ -179,17 +186,13 @@ unsigned RISCVSubtarget::getMaxRVVVectorSizeInBits() const {
     report_fatal_error("riscv-v-vector-bits-max specified is lower "
                        "than the Zvl*b limitation");
 
-  // XReviveVec is defined for a machine whose vector length is exactly the
-  // minimum its Zvl states, rather than one that chooses its own. Saying so
-  // here rather than leaving it to a command line option is what keeps the
-  // frame layout free of quantities that are only known at run time.
-  if (RVVVectorBitsMax == 0 && hasVendorXReviveVec())
-    return ZvlLen;
-
   return RVVVectorBitsMax;
 }
 
 unsigned RISCVSubtarget::getMinRVVVectorSizeInBits() const {
+  if (hasVendorXReviveVec())
+    return XReviveVecVectorLengthBits;
+
   assert(hasVInstructions() &&
          "Tried to get vector length without Zve or V extension support!");
 
