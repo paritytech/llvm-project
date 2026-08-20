@@ -126,9 +126,9 @@ define i256 @call_ten(i256 %a) {
 ; CHECK-NEXT:    addi s0, sp, 96
 ; CHECK-NEXT:    .cfi_def_cfa s0, 0
 ; CHECK-NEXT:    andi sp, sp, -32
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wst v8, 32(sp)
 ; CHECK-NEXT:    revive.wst v8, 0(sp)
-; CHECK-NEXT:    vsetivli zero, 1, e8, m1, ta, ma
 ; CHECK-NEXT:    vmv2r.v v10, v8
 ; CHECK-NEXT:    vmv2r.v v12, v8
 ; CHECK-NEXT:    vmv2r.v v14, v8
@@ -164,6 +164,7 @@ define i256 @live_across_call(i256 %a, i256 %b) {
 ; CHECK-NEXT:    call sink2
 ; CHECK-NEXT:    addi a0, sp, 8
 ; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
 ; CHECK-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra

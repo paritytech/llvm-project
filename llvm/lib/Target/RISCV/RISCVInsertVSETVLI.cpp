@@ -402,7 +402,7 @@ void RISCVInsertVSETVLI::transferAfter(VSETVLIInfo &Info,
 
   // If this is something that updates VL/VTYPE that we don't know about, set
   // the state to unknown.
-  if (MI.isCall() || MI.isInlineAsm() ||
+  if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
       MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
       MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
     Info = VSETVLIInfo::getUnknown();
@@ -620,7 +620,7 @@ void RISCVInsertVSETVLI::emitVSETVLIs(MachineBasicBlock &MBB) {
                                               /*isImp*/ true));
     }
 
-    if (MI.isCall() || MI.isInlineAsm() ||
+    if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
         MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
         MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
       PrefixTransparent = false;
@@ -821,7 +821,7 @@ void RISCVInsertVSETVLI::coalesceVSETVLIs(MachineBasicBlock &MBB) const {
 
     if (!RISCVInstrInfo::isVectorConfigInstr(MI)) {
       Used.doUnion(getDemanded(MI, ST));
-      if (MI.isCall() || MI.isInlineAsm() ||
+      if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
           MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
           MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
         NextMI = nullptr;

@@ -22,6 +22,7 @@ define i256 @select_i256(i256 %a, i256 %b, i64 %c) {
 define i256 @select_wide_cond(i256 %a, i256 %b) {
 ; CHECK-LABEL: select_wide_cond:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wminu v8, v8, v10
 ; CHECK-NEXT:    ret
   %t = icmp ult i256 %a, %b
@@ -34,9 +35,11 @@ define i256 @phi_i256(i256 %a, i256 %b, i64 %c) {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    beqz a0, .LBB2_2
 ; CHECK-NEXT:  # %bb.1: # %else
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wsub v8, v8, v10
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB2_2: # %then
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
 ; CHECK-NEXT:    ret
 entry:
@@ -62,6 +65,7 @@ define i256 @spill_wide(ptr %p) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 304
 ; CHECK-NEXT:    sd ra, 296(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wld v8, 0(a0)
 ; CHECK-NEXT:    revive.wld v10, 0(a0)
 ; CHECK-NEXT:    addi a1, sp, 264
@@ -93,6 +97,7 @@ define i256 @spill_wide(ptr %p) {
 ; CHECK-NEXT:    call sink1
 ; CHECK-NEXT:    addi a0, sp, 264
 ; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
 ; CHECK-NEXT:    addi a0, sp, 232
 ; CHECK-NEXT:    vl2r.v v10, (a0) # 32-byte Folded Reload

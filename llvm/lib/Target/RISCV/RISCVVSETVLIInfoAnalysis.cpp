@@ -177,10 +177,11 @@ DemandedFields getDemanded(const MachineInstr &MI, const RISCVSubtarget *ST) {
   // Most instructions don't use any of these subfeilds.
   DemandedFields Res;
   // Start conservative if registers are used
-  if (MI.isCall() || MI.isInlineAsm() ||
+  bool CallClobbers = MI.isCall() && !ST->hasCallPreservedVType();
+  if (CallClobbers || MI.isInlineAsm() ||
       MI.readsRegister(RISCV::VL, /*TRI=*/nullptr))
     Res.demandVL();
-  if (MI.isCall() || MI.isInlineAsm() ||
+  if (CallClobbers || MI.isInlineAsm() ||
       MI.readsRegister(RISCV::VTYPE, /*TRI=*/nullptr))
     Res.demandVTYPE();
   // Start conservative on the unlowered form too

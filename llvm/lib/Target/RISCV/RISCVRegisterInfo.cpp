@@ -783,6 +783,11 @@ RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & MF,
     llvm_unreachable("Unrecognized ABI");
   case RISCVABI::ABI_ILP32E:
   case RISCVABI::ABI_LP64E:
+    // Only this ABI gets the vl/vtype-preserving mask: it is the one the extension
+    // targets. Elsewhere XReviveVec still works, just with the configuration
+    // re-established after each call.
+    if (Subtarget.hasCallPreservedVType())
+      return CSR_ILP32E_LP64E_XReviveVec_RegMask;
     return CSR_ILP32E_LP64E_RegMask;
   case RISCVABI::ABI_ILP32:
   case RISCVABI::ABI_LP64:

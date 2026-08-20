@@ -11,10 +11,10 @@
 // has no carry flag, so the generic expansion pays an `sltu` per carry: 56 bytes
 // for one `add i256`, 86 for `icmp ult`.
 //
-// Values live in VRM2 -- i256 is added to its type list, so at VLEN=128 a wide
-// value is an LMUL=2 register pair. The semantics are scalar: nothing here reads
-// `vtype` or `vl`, and the width is fixed by the opcode, not by a `vsetvli`.
-//
+// A wide value is a vector register group, and its width is `LMUL * VLEN` read
+// from `vtype`: one `revive.wadd` covers 256, 512 and 1024 bits, whichever
+// `vsetivli` is in force. No width in the encoding, so the extension fits in
+// custom-2. Neither `vl` nor SEW is read; a group is one integer, not a vector.
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
@@ -33,131 +33,241 @@ def riscv_wide_sext : RVSDNode<"WIDE_SEXT", SDT_ReviveWiden>;
 // Encodings
 //===----------------------------------------------------------------------===//
 
-// Each width gets its own custom opcode, because the I- and S-type memory forms
-// have no spare field to hold one. funct3 selects the operand shape and funct7
-// the operation within it.
+// All in custom-2: funct3 selects the operand shape, funct7 the operation. No
+// width is encoded, so custom-1 and custom-3 stay free.
 //
-//   i256 (LMUL=2) -> custom-2    i512 (LMUL=4) -> custom-3    i1024 -> custom-1
-class RVReviveALU<RISCVOpcode opc, bits<7> op, string opcodestr, RegisterClass rc>
-    : RVInstR<op, 0b000, opc, (outs rc:$rd),
-              (ins rc:$rs1, rc:$rs2), opcodestr, "$rd, $rs1, $rs2">;
+// Operands are single vector registers because that is all an encoding names; the
+// group each width occupies is expressed by the pseudos below, which is what the
+// register allocator sees.
+class RVReviveALU<bits<7> op, string opcodestr>
+    : RVInstR<op, 0b000, OPC_CUSTOM_2, (outs VR:$rd),
+              (ins VR:$rs1, VR:$rs2), opcodestr, "$rd, $rs1, $rs2">;
 
 // Comparisons narrow to a GPR: the result feeds branches and selects.
-class RVReviveCmp<RISCVOpcode opc, bits<7> op, string opcodestr, RegisterClass rc>
-    : RVInstR<op, 0b001, opc, (outs GPR:$rd),
-              (ins rc:$rs1, rc:$rs2), opcodestr, "$rd, $rs1, $rs2">;
+class RVReviveCmp<bits<7> op, string opcodestr>
+    : RVInstR<op, 0b001, OPC_CUSTOM_2, (outs GPR:$rd),
+              (ins VR:$rs1, VR:$rs2), opcodestr, "$rd, $rs1, $rs2">;
 
 // Shift amounts come from a GPR: only the low bits can matter.
-class RVReviveShift<RISCVOpcode opc, bits<7> op, string opcodestr, RegisterClass rc>
-    : RVInstR<op, 0b010, opc, (outs rc:$rd),
-              (ins rc:$rs1, GPR:$rs2), opcodestr, "$rd, $rs1, $rs2">;
+class RVReviveShift<bits<7> op, string opcodestr>
+    : RVInstR<op, 0b010, OPC_CUSTOM_2, (outs VR:$rd),
+              (ins VR:$rs1, GPR:$rs2), opcodestr, "$rd, $rs1, $rs2">;
 
 // Conversions between a wide value and an XLen one.
-class RVReviveCvtToGPR<RISCVOpcode opc, bits<7> op, string opcodestr, RegisterClass rc>
-    : RVInstR<op, 0b110, opc, (outs GPR:$rd), (ins rc:$rs1),
+class RVReviveCvtToGPR<bits<7> op, string opcodestr>
+    : RVInstR<op, 0b110, OPC_CUSTOM_2, (outs GPR:$rd), (ins VR:$rs1),
               opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
 
-class RVReviveCvtToWide<RISCVOpcode opc, bits<7> op, string opcodestr, RegisterClass rc>
-    : RVInstR<op, 0b111, opc, (outs rc:$rd), (ins GPR:$rs1),
+class RVReviveCvtToWide<bits<7> op, string opcodestr>
+    : RVInstR<op, 0b111, OPC_CUSTOM_2, (outs VR:$rd), (ins GPR:$rs1),
               opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
 
 // A wide unary. Copies do not need one: the RVV classes already have VMVnR_V.
-class RVReviveMove<RISCVOpcode opc, bits<7> op, string opcodestr, RegisterClass rc>
-    : RVInstR<op, 0b110, opc, (outs rc:$rd), (ins rc:$rs1),
+class RVReviveMove<bits<7> op, string opcodestr>
+    : RVInstR<op, 0b110, OPC_CUSTOM_2, (outs VR:$rd), (ins VR:$rs1),
               opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
 
 // The modular operations take three wide inputs, so they need R4.
-class RVReviveR4<RISCVOpcode opc, bits<2> funct2, string opcodestr, RegisterClass rc>
-    : RVInstR4<funct2, 0b011, opc, (outs rc:$rd),
-               (ins rc:$rs1, rc:$rs2, rc:$rs3), opcodestr,
+class RVReviveR4<bits<2> funct2, string opcodestr>
+    : RVInstR4<funct2, 0b011, OPC_CUSTOM_2, (outs VR:$rd),
+               (ins VR:$rs1, VR:$rs2, VR:$rs3), opcodestr,
                "$rd, $rs1, $rs2, $rs3">;
 
-// One set of instructions per width. `W` names the suffix used in the mnemonic
-// and the record name, so REVIVE_W_ADD is the 256-bit add and REVIVE_D_ADD the
-// 512-bit one.
-multiclass RVReviveOps<RISCVOpcode opc, string W, string suffix, RegisterClass rc> {
+let Predicates = [HasVendorXReviveVec] in {
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in {
-  def W#_ADD  : RVReviveALU<opc, 0b0000000, "revive."#suffix#"add",  rc>;
-  def W#_SUB  : RVReviveALU<opc, 0b0000001, "revive."#suffix#"sub",  rc>;
-  def W#_MUL  : RVReviveALU<opc, 0b0000010, "revive."#suffix#"mul",  rc>;
-  def W#_AND  : RVReviveALU<opc, 0b0000011, "revive."#suffix#"and",  rc>;
-  def W#_OR   : RVReviveALU<opc, 0b0000100, "revive."#suffix#"or",   rc>;
-  def W#_XOR  : RVReviveALU<opc, 0b0000101, "revive."#suffix#"xor",  rc>;
-  def W#_UDIV : RVReviveALU<opc, 0b0000110, "revive."#suffix#"divu", rc>;
-  def W#_SDIV : RVReviveALU<opc, 0b0000111, "revive."#suffix#"div",  rc>;
-  def W#_UREM : RVReviveALU<opc, 0b0001000, "revive."#suffix#"remu", rc>;
-  def W#_SREM : RVReviveALU<opc, 0b0001001, "revive."#suffix#"rem",  rc>;
-  def W#_EXP     : RVReviveALU<opc, 0b0001010, "revive."#suffix#"exp", rc>;
-  def W#_SIGNEXT : RVReviveALU<opc, 0b0001011, "revive."#suffix#"signextend", rc>;
-  def W#_MINU : RVReviveALU<opc, 0b0001100, "revive."#suffix#"minu", rc>;
-  def W#_MIN  : RVReviveALU<opc, 0b0001101, "revive."#suffix#"min",  rc>;
-  def W#_MAXU : RVReviveALU<opc, 0b0001110, "revive."#suffix#"maxu", rc>;
-  def W#_MAX  : RVReviveALU<opc, 0b0001111, "revive."#suffix#"max",  rc>;
+def REVIVE_W_ADD     : RVReviveALU<0b0000000, "revive.wadd">;
+def REVIVE_W_SUB     : RVReviveALU<0b0000001, "revive.wsub">;
+def REVIVE_W_MUL     : RVReviveALU<0b0000010, "revive.wmul">;
+def REVIVE_W_AND     : RVReviveALU<0b0000011, "revive.wand">;
+def REVIVE_W_OR      : RVReviveALU<0b0000100, "revive.wor">;
+def REVIVE_W_XOR     : RVReviveALU<0b0000101, "revive.wxor">;
+def REVIVE_W_UDIV    : RVReviveALU<0b0000110, "revive.wdivu">;
+def REVIVE_W_SDIV    : RVReviveALU<0b0000111, "revive.wdiv">;
+def REVIVE_W_UREM    : RVReviveALU<0b0001000, "revive.wremu">;
+def REVIVE_W_SREM    : RVReviveALU<0b0001001, "revive.wrem">;
+def REVIVE_W_EXP     : RVReviveALU<0b0001010, "revive.wexp">;
+def REVIVE_W_SIGNEXT : RVReviveALU<0b0001011, "revive.wsignextend">;
+def REVIVE_W_MINU    : RVReviveALU<0b0001100, "revive.wminu">;
+def REVIVE_W_MIN     : RVReviveALU<0b0001101, "revive.wmin">;
+def REVIVE_W_MAXU    : RVReviveALU<0b0001110, "revive.wmaxu">;
+def REVIVE_W_MAX     : RVReviveALU<0b0001111, "revive.wmax">;
 
-  def W#_SLL : RVReviveShift<opc, 0b0000000, "revive."#suffix#"sll", rc>;
-  def W#_SRL : RVReviveShift<opc, 0b0000001, "revive."#suffix#"srl", rc>;
-  def W#_SRA : RVReviveShift<opc, 0b0000010, "revive."#suffix#"sra", rc>;
+def REVIVE_W_SLL : RVReviveShift<0b0000000, "revive.wsll">;
+def REVIVE_W_SRL : RVReviveShift<0b0000001, "revive.wsrl">;
+def REVIVE_W_SRA : RVReviveShift<0b0000010, "revive.wsra">;
 
-  def W#_SEQ  : RVReviveCmp<opc, 0b0000000, "revive."#suffix#"seq",  rc>;
-  def W#_SNE  : RVReviveCmp<opc, 0b0000001, "revive."#suffix#"sne",  rc>;
-  def W#_SLTU : RVReviveCmp<opc, 0b0000010, "revive."#suffix#"sltu", rc>;
-  def W#_SLT  : RVReviveCmp<opc, 0b0000011, "revive."#suffix#"slt",  rc>;
+// `icmp ult` is 6% of all IR revive emits and the most expensive frequent
+// operation: the generic expansion walks limbs from the top, branching at each.
+def REVIVE_W_SEQ  : RVReviveCmp<0b0000000, "revive.wseq">;
+def REVIVE_W_SNE  : RVReviveCmp<0b0000001, "revive.wsne">;
+def REVIVE_W_SLTU : RVReviveCmp<0b0000010, "revive.wsltu">;
+def REVIVE_W_SLT  : RVReviveCmp<0b0000011, "revive.wslt">;
 
-  def W#_TRUNC : RVReviveCvtToGPR<opc, 0b0000001, "revive."#suffix#"trunc", rc>;
-  def W#_ZEXT  : RVReviveCvtToWide<opc, 0b0000000, "revive."#suffix#"zext", rc>;
-  def W#_SEXT  : RVReviveCvtToWide<opc, 0b0000001, "revive."#suffix#"sext", rc>;
-  def W#_BSWAP : RVReviveMove<opc, 0b0000010, "revive."#suffix#"bswap", rc>;
+def REVIVE_W_TRUNC : RVReviveCvtToGPR<0b0000001, "revive.wtrunc">;
+def REVIVE_W_ZEXT  : RVReviveCvtToWide<0b0000000, "revive.wzext">;
+def REVIVE_W_SEXT  : RVReviveCvtToWide<0b0000001, "revive.wsext">;
+def REVIVE_W_BSWAP : RVReviveMove<0b0000010, "revive.wbswap">;
 
-  def W#_ADDMOD : RVReviveR4<opc, 0b00, "revive."#suffix#"addmod", rc>;
-  def W#_MULMOD : RVReviveR4<opc, 0b01, "revive."#suffix#"mulmod", rc>;
-}
+// EVM operations with no RISC-V equivalent, each replacing a stdlib.ll routine
+// (__mulmod 4,534 bytes, __addmod 3,756).
+def REVIVE_W_ADDMOD : RVReviveR4<0b00, "revive.waddmod">;
+def REVIVE_W_MULMOD : RVReviveR4<0b01, "revive.wmulmod">;
+} // hasSideEffects = 0, mayLoad = 0, mayStore = 0
 
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-  def W#_LD : RVInstI<0b100, opc, (outs rc:$rd),
-                      (ins GPRMem:$rs1, simm12_lo:$imm12),
-                      "revive."#suffix#"ld", "$rd, ${imm12}(${rs1})">;
+def REVIVE_W_LD : RVInstI<0b100, OPC_CUSTOM_2, (outs VR:$rd),
+                          (ins GPRMem:$rs1, simm12_lo:$imm12),
+                          "revive.wld", "$rd, ${imm12}(${rs1})">;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-  def W#_ST : RVInstS<0b101, opc, (outs),
-                      (ins rc:$rs2, GPRMem:$rs1, simm12_lo:$imm12),
-                      "revive."#suffix#"st", "$rs2, ${imm12}(${rs1})">;
+def REVIVE_W_ST : RVInstS<0b101, OPC_CUSTOM_2, (outs),
+                          (ins VR:$rs2, GPRMem:$rs1, simm12_lo:$imm12),
+                          "revive.wst", "$rs2, ${imm12}(${rs1})">;
+} // Predicates = [HasVendorXReviveVec]
+
+//===----------------------------------------------------------------------===//
+// Pseudos, one per width
+//===----------------------------------------------------------------------===//
+
+// These carry the width the encodings do not: each names its register class and
+// LMUL, so RISCVInsertVSETVLI emits the `vsetivli` for it and elides the rest.
+// RISCVVPseudosTable maps them back to the one encoding by the width suffix.
+//
+// SEW is 64 because a vtype must name one. At VLEN=128 that puts VLMAX at 4, 8
+// and 16 -- under 32, so the configuration stays in its immediate form.
+defvar ReviveLog2SEW = 6;
+defvar ReviveLMULs = [V_M2, V_M4, V_M8];
+
+// `BaseInstr` is named, not derived: PseudoToVInst strips `_SE`, which would map
+// REVIVE_W_SEQ to REVIVE_WQ and REVIVE_W_SEXT to REVIVE_WXT.
+class ReviveWidePseudo<dag outs, dag ins, LMULInfo m, Instruction base>
+    : RISCVVPseudo<outs, ins> {
+  let BaseInstr = base;
+  let VLMul = m.value;
+  let HasVLOp = 1;
+  let HasSEWOp = 1;
+  let hasSideEffects = 0;
+  let mayLoad = 0;
+  let mayStore = 0;
+}
+
+multiclass ReviveWideALUPseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs m.vrclass:$rd),
+                                    (ins m.vrclass:$rs1, m.vrclass:$rs2,
+                                         AVL:$vl, sew:$sew), m, base>;
+}
+
+multiclass ReviveWideShiftPseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs m.vrclass:$rd),
+                                    (ins m.vrclass:$rs1, GPR:$rs2,
+                                         AVL:$vl, sew:$sew), m, base>;
+}
+
+multiclass ReviveWideCmpPseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs GPR:$rd),
+                                    (ins m.vrclass:$rs1, m.vrclass:$rs2,
+                                         AVL:$vl, sew:$sew), m, base>;
+}
+
+multiclass ReviveWideToGPRPseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs GPR:$rd),
+                                    (ins m.vrclass:$rs1, AVL:$vl, sew:$sew), m, base>;
+}
+
+multiclass ReviveWideFromGPRPseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs m.vrclass:$rd),
+                                    (ins GPR:$rs1, AVL:$vl, sew:$sew), m, base>;
+}
+
+multiclass ReviveWideUnaryPseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs m.vrclass:$rd),
+                                    (ins m.vrclass:$rs1, AVL:$vl, sew:$sew), m, base>;
+}
+
+multiclass ReviveWideR4Pseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs m.vrclass:$rd),
+                                    (ins m.vrclass:$rs1, m.vrclass:$rs2,
+                                         m.vrclass:$rs3, AVL:$vl, sew:$sew), m, base>;
+}
+
+multiclass ReviveWideLoadPseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs m.vrclass:$rd),
+                                    (ins GPRMem:$rs1, simm12_lo:$imm12,
+                                         AVL:$vl, sew:$sew), m, base> {
+      let mayLoad = 1;
+    }
+}
+
+multiclass ReviveWideStorePseudo<Instruction base> {
+  foreach m = ReviveLMULs in
+    def "_"#m.MX : ReviveWidePseudo<(outs),
+                                    (ins m.vrclass:$rs2, GPRMem:$rs1,
+                                         simm12_lo:$imm12, AVL:$vl, sew:$sew), m, base> {
+      let mayStore = 1;
+    }
 }
 
 let Predicates = [HasVendorXReviveVec] in {
-defm REVIVE : RVReviveOps<OPC_CUSTOM_2, "_W", "w", VRM2>;   // i256,  LMUL=2
-defm REVIVE : RVReviveOps<OPC_CUSTOM_3, "_D", "d", VRM4>;   // i512,  LMUL=4
-defm REVIVE : RVReviveOps<OPC_CUSTOM_1, "_Q", "q", VRM8>;   // i1024, LMUL=8
-}
+foreach op = ["ADD", "SUB", "MUL", "AND", "OR", "XOR", "UDIV", "SDIV", "UREM",
+              "SREM", "EXP", "SIGNEXT", "MINU", "MIN", "MAXU", "MAX"] in
+  defm "PseudoREVIVE_W_"#op : ReviveWideALUPseudo<!cast<Instruction>("REVIVE_W_"#op)>;
+
+foreach op = ["SLL", "SRL", "SRA"] in
+  defm "PseudoREVIVE_W_"#op : ReviveWideShiftPseudo<!cast<Instruction>("REVIVE_W_"#op)>;
+
+foreach op = ["SEQ", "SNE", "SLTU", "SLT"] in
+  defm "PseudoREVIVE_W_"#op : ReviveWideCmpPseudo<!cast<Instruction>("REVIVE_W_"#op)>;
+
+defm PseudoREVIVE_W_TRUNC : ReviveWideToGPRPseudo<REVIVE_W_TRUNC>;
+defm PseudoREVIVE_W_ZEXT  : ReviveWideFromGPRPseudo<REVIVE_W_ZEXT>;
+defm PseudoREVIVE_W_SEXT  : ReviveWideFromGPRPseudo<REVIVE_W_SEXT>;
+defm PseudoREVIVE_W_BSWAP : ReviveWideUnaryPseudo<REVIVE_W_BSWAP>;
+
+foreach op = ["ADDMOD", "MULMOD"] in
+  defm "PseudoREVIVE_W_"#op : ReviveWideR4Pseudo<!cast<Instruction>("REVIVE_W_"#op)>;
+
+defm PseudoREVIVE_W_LD : ReviveWideLoadPseudo<REVIVE_W_LD>;
+defm PseudoREVIVE_W_ST : ReviveWideStorePseudo<REVIVE_W_ST>;
+} // Predicates = [HasVendorXReviveVec]
 
 //===----------------------------------------------------------------------===//
 // Selection patterns
 //===----------------------------------------------------------------------===//
 
-multiclass RVRevivePats<string W, ValueType vt, RegisterClass rc> {
-  def : Pat<(vt (add  (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_ADD")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (sub  (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_SUB")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (mul  (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_MUL")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (and  (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_AND")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (or   (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_OR")   (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (xor  (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_XOR")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (udiv (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_UDIV") (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (sdiv (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_SDIV") (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (urem (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_UREM") (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (srem (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_SREM") (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (umin (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_MINU") (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (smin (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_MIN")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (umax (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_MAXU") (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (smax (vt rc:$a), (vt rc:$b))), (!cast<Instruction>("REVIVE"#W#"_MAX")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(vt (bswap (vt rc:$a))), (!cast<Instruction>("REVIVE"#W#"_BSWAP") (vt rc:$a))>;
+multiclass RVRevivePats<LMULInfo m, ValueType vt> {
+  defvar rc = m.vrclass;
+  // Each reads vtype for its width, so each carries the AVL and SEW naming its LMUL.
+  defvar P = "PseudoREVIVE_W_";
+  defvar S = "_"#m.MX;
+
+  foreach p = [["add", "ADD"], ["sub", "SUB"], ["mul", "MUL"], ["and", "AND"],
+               ["or", "OR"], ["xor", "XOR"], ["udiv", "UDIV"], ["sdiv", "SDIV"],
+               ["urem", "UREM"], ["srem", "SREM"], ["umin", "MINU"],
+               ["smin", "MIN"], ["umax", "MAXU"], ["smax", "MAX"]] in
+    def : Pat<(vt (!cast<SDPatternOperator>(p[0]) (vt rc:$a), (vt rc:$b))),
+              (!cast<Instruction>(P#p[1]#S) (vt rc:$a), (vt rc:$b),
+                                            (VLMax), ReviveLog2SEW)>;
+
+  def : Pat<(vt (bswap (vt rc:$a))),
+            (!cast<Instruction>(P#"BSWAP"#S) (vt rc:$a), (VLMax), ReviveLog2SEW)>;
+
   // Widened operands and a truncated result mean the wide instruction is doing
   // XLen work. Low bits depend only on low bits here, so the scalar one is
-  // equivalent.
+  // equivalent -- and it needs no vtype at all.
   foreach p = [["add", "ADD"], ["sub", "SUB"],
                ["and", "AND"], ["or", "OR"], ["xor", "XOR"]] in {
     def : Pat<(XLenVT (trunc (vt (!cast<SDPatternOperator>(p[0])
@@ -182,38 +292,51 @@ multiclass RVRevivePats<string W, ValueType vt, RegisterClass rc> {
   def : Pat<(XLenVT (setcc (vt (zext (XLenVT GPR:$a))), (vt (zext (XLenVT GPR:$b))), SETUGT)),
             (SLTU GPR:$b, GPR:$a)>;
 
-  def : Pat<(vt (riscv_wide_zext (XLenVT GPR:$a))), (!cast<Instruction>("REVIVE"#W#"_ZEXT") GPR:$a)>;
-  def : Pat<(vt (riscv_wide_sext (XLenVT GPR:$a))), (!cast<Instruction>("REVIVE"#W#"_SEXT") GPR:$a)>;
+  def : Pat<(vt (riscv_wide_zext (XLenVT GPR:$a))),
+            (!cast<Instruction>(P#"ZEXT"#S) GPR:$a, (VLMax), ReviveLog2SEW)>;
+  def : Pat<(vt (riscv_wide_sext (XLenVT GPR:$a))),
+            (!cast<Instruction>(P#"SEXT"#S) GPR:$a, (VLMax), ReviveLog2SEW)>;
 
   // The IR types both shift operands alike; the DAG often narrows the amount
   // first, so both forms are matched.
-  def : Pat<(vt (shl (vt rc:$a), (XLenVT GPR:$b))), (!cast<Instruction>("REVIVE"#W#"_SLL") (vt rc:$a), GPR:$b)>;
-  def : Pat<(vt (srl (vt rc:$a), (XLenVT GPR:$b))), (!cast<Instruction>("REVIVE"#W#"_SRL") (vt rc:$a), GPR:$b)>;
-  def : Pat<(vt (sra (vt rc:$a), (XLenVT GPR:$b))), (!cast<Instruction>("REVIVE"#W#"_SRA") (vt rc:$a), GPR:$b)>;
-  def : Pat<(vt (shl (vt rc:$a), (vt rc:$b))),
-            (!cast<Instruction>("REVIVE"#W#"_SLL") (vt rc:$a), (!cast<Instruction>("REVIVE"#W#"_TRUNC") (vt rc:$b)))>;
-  def : Pat<(vt (srl (vt rc:$a), (vt rc:$b))),
-            (!cast<Instruction>("REVIVE"#W#"_SRL") (vt rc:$a), (!cast<Instruction>("REVIVE"#W#"_TRUNC") (vt rc:$b)))>;
-  def : Pat<(vt (sra (vt rc:$a), (vt rc:$b))),
-            (!cast<Instruction>("REVIVE"#W#"_SRA") (vt rc:$a), (!cast<Instruction>("REVIVE"#W#"_TRUNC") (vt rc:$b)))>;
+  foreach p = [["shl", "SLL"], ["srl", "SRL"], ["sra", "SRA"]] in {
+    def : Pat<(vt (!cast<SDPatternOperator>(p[0]) (vt rc:$a), (XLenVT GPR:$b))),
+              (!cast<Instruction>(P#p[1]#S) (vt rc:$a), GPR:$b,
+                                            (VLMax), ReviveLog2SEW)>;
+    def : Pat<(vt (!cast<SDPatternOperator>(p[0]) (vt rc:$a), (vt rc:$b))),
+              (!cast<Instruction>(P#p[1]#S)
+                  (vt rc:$a),
+                  (!cast<Instruction>(P#"TRUNC"#S) (vt rc:$b), (VLMax), ReviveLog2SEW),
+                  (VLMax), ReviveLog2SEW)>;
+  }
 
-  def : Pat<(XLenVT (setcc (vt rc:$a), (vt rc:$b), SETEQ)),  (!cast<Instruction>("REVIVE"#W#"_SEQ")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(XLenVT (setcc (vt rc:$a), (vt rc:$b), SETNE)),  (!cast<Instruction>("REVIVE"#W#"_SNE")  (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(XLenVT (setcc (vt rc:$a), (vt rc:$b), SETULT)), (!cast<Instruction>("REVIVE"#W#"_SLTU") (vt rc:$a), (vt rc:$b))>;
-  def : Pat<(XLenVT (setcc (vt rc:$a), (vt rc:$b), SETLT)),  (!cast<Instruction>("REVIVE"#W#"_SLT")  (vt rc:$a), (vt rc:$b))>;
+  foreach p = [["SETEQ", "SEQ"], ["SETNE", "SNE"], ["SETULT", "SLTU"],
+               ["SETLT", "SLT"]] in
+    def : Pat<(XLenVT (setcc (vt rc:$a), (vt rc:$b), !cast<CondCode>(p[0]))),
+              (!cast<Instruction>(P#p[1]#S) (vt rc:$a), (vt rc:$b),
+                                            (VLMax), ReviveLog2SEW)>;
+
   // The reversed forms are the same instruction with operands swapped.
-  def : Pat<(XLenVT (setcc (vt rc:$a), (vt rc:$b), SETUGT)), (!cast<Instruction>("REVIVE"#W#"_SLTU") (vt rc:$b), (vt rc:$a))>;
-  def : Pat<(XLenVT (setcc (vt rc:$a), (vt rc:$b), SETGT)),  (!cast<Instruction>("REVIVE"#W#"_SLT")  (vt rc:$b), (vt rc:$a))>;
+  foreach p = [["SETUGT", "SLTU"], ["SETGT", "SLT"]] in
+    def : Pat<(XLenVT (setcc (vt rc:$a), (vt rc:$b), !cast<CondCode>(p[0]))),
+              (!cast<Instruction>(P#p[1]#S) (vt rc:$b), (vt rc:$a),
+                                            (VLMax), ReviveLog2SEW)>;
 
-  def : Pat<(i64 (trunc (vt rc:$a))), (!cast<Instruction>("REVIVE"#W#"_TRUNC") (vt rc:$a))>;
-  def : Pat<(vt (zext (XLenVT GPR:$a))), (!cast<Instruction>("REVIVE"#W#"_ZEXT") GPR:$a)>;
-  def : Pat<(vt (sext (XLenVT GPR:$a))), (!cast<Instruction>("REVIVE"#W#"_SEXT") GPR:$a)>;
-  def : Pat<(vt (anyext (XLenVT GPR:$a))), (!cast<Instruction>("REVIVE"#W#"_ZEXT") GPR:$a)>;
+  def : Pat<(i64 (trunc (vt rc:$a))),
+            (!cast<Instruction>(P#"TRUNC"#S) (vt rc:$a), (VLMax), ReviveLog2SEW)>;
+  def : Pat<(vt (zext (XLenVT GPR:$a))),
+            (!cast<Instruction>(P#"ZEXT"#S) GPR:$a, (VLMax), ReviveLog2SEW)>;
+  def : Pat<(vt (sext (XLenVT GPR:$a))),
+            (!cast<Instruction>(P#"SEXT"#S) GPR:$a, (VLMax), ReviveLog2SEW)>;
+  def : Pat<(vt (anyext (XLenVT GPR:$a))),
+            (!cast<Instruction>(P#"ZEXT"#S) GPR:$a, (VLMax), ReviveLog2SEW)>;
 
   def : Pat<(vt (load (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
-            (!cast<Instruction>("REVIVE"#W#"_LD") GPR:$rs1, simm12_lo:$imm12)>;
+            (!cast<Instruction>(P#"LD"#S) GPR:$rs1, simm12_lo:$imm12,
+                                          (VLMax), ReviveLog2SEW)>;
   def : Pat<(store (vt rc:$rs2), (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12)),
-            (!cast<Instruction>("REVIVE"#W#"_ST") (vt rc:$rs2), GPR:$rs1, simm12_lo:$imm12)>;
+            (!cast<Instruction>(P#"ST"#S) (vt rc:$rs2), GPR:$rs1, simm12_lo:$imm12,
+                                          (VLMax), ReviveLog2SEW)>;
 }
 
 // Narrowing multiply, kept apart because scalar MUL needs the multiply
@@ -232,52 +355,60 @@ defm : RVReviveMulPats<i1024>;
 }
 
 let Predicates = [HasVendorXReviveVec] in {
-defm : RVRevivePats<"_W", i256,  VRM2>;
-defm : RVRevivePats<"_D", i512,  VRM4>;
-defm : RVRevivePats<"_Q", i1024, VRM8>;
+defm : RVRevivePats<V_M2, i256>;
+defm : RVRevivePats<V_M4, i512>;
+defm : RVRevivePats<V_M8, i1024>;
 
 // Only i256 has these: the widening nodes exist for constant materialisation,
 // the extending loads and sign_extend_inreg for narrow memory, and the modular
 // intrinsics are EVM operations that are 256-bit by definition.
 def : Pat<(int_riscv_revive_addmod (i256 VRM2:$a), (i256 VRM2:$b), (i256 VRM2:$c)),
-          (REVIVE_W_ADDMOD (i256 VRM2:$a), (i256 VRM2:$b), (i256 VRM2:$c))>;
+          (PseudoREVIVE_W_ADDMOD_M2 (i256 VRM2:$a), (i256 VRM2:$b), (i256 VRM2:$c),
+                                    (VLMax), ReviveLog2SEW)>;
 def : Pat<(int_riscv_revive_mulmod (i256 VRM2:$a), (i256 VRM2:$b), (i256 VRM2:$c)),
-          (REVIVE_W_MULMOD (i256 VRM2:$a), (i256 VRM2:$b), (i256 VRM2:$c))>;
+          (PseudoREVIVE_W_MULMOD_M2 (i256 VRM2:$a), (i256 VRM2:$b), (i256 VRM2:$c),
+                                    (VLMax), ReviveLog2SEW)>;
 def : Pat<(int_riscv_revive_exp (i256 VRM2:$a), (i256 VRM2:$b)),
-          (REVIVE_W_EXP (i256 VRM2:$a), (i256 VRM2:$b))>;
+          (PseudoREVIVE_W_EXP_M2 (i256 VRM2:$a), (i256 VRM2:$b),
+                                 (VLMax), ReviveLog2SEW)>;
 def : Pat<(int_riscv_revive_signextend (i256 VRM2:$a), (i256 VRM2:$b)),
-          (REVIVE_W_SIGNEXT (i256 VRM2:$a), (i256 VRM2:$b))>;
+          (PseudoREVIVE_W_SIGNEXT_M2 (i256 VRM2:$a), (i256 VRM2:$b),
+                                     (VLMax), ReviveLog2SEW)>;
 
-def : Pat<(i256 (extloadi8 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
-          (REVIVE_W_ZEXT (LBU GPR:$rs1, simm12_lo:$imm12))>;
-def : Pat<(i256 (extloadi16 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
-          (REVIVE_W_ZEXT (LHU GPR:$rs1, simm12_lo:$imm12))>;
-def : Pat<(i256 (extloadi32 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
-          (REVIVE_W_ZEXT (LWU GPR:$rs1, simm12_lo:$imm12))>;
-def : Pat<(i256 (extloadi64 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
-          (REVIVE_W_ZEXT (LD GPR:$rs1, simm12_lo:$imm12))>;
-def : Pat<(i256 (sextloadi8 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
-          (REVIVE_W_SEXT (LB GPR:$rs1, simm12_lo:$imm12))>;
-def : Pat<(i256 (sextloadi16 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
-          (REVIVE_W_SEXT (LH GPR:$rs1, simm12_lo:$imm12))>;
-def : Pat<(i256 (sextloadi32 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
-          (REVIVE_W_SEXT (LW GPR:$rs1, simm12_lo:$imm12))>;
+foreach p = [["extloadi8", "LBU", "ZEXT"], ["extloadi16", "LHU", "ZEXT"],
+             ["extloadi32", "LWU", "ZEXT"], ["extloadi64", "LD", "ZEXT"],
+             ["sextloadi8", "LB", "SEXT"], ["sextloadi16", "LH", "SEXT"],
+             ["sextloadi32", "LW", "SEXT"]] in
+  def : Pat<(i256 (!cast<SDPatternOperator>(p[0])
+                      (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
+            (!cast<Instruction>("PseudoREVIVE_W_"#p[2]#"_M2")
+                (!cast<Instruction>(p[1]) GPR:$rs1, simm12_lo:$imm12),
+                (VLMax), ReviveLog2SEW)>;
 
 def : Pat<(i256 (sext_inreg (i256 VRM2:$rs1), i32)),
-          (REVIVE_W_SEXT (ADDIW (REVIVE_W_TRUNC (i256 VRM2:$rs1)), 0))>;
+          (PseudoREVIVE_W_SEXT_M2
+              (ADDIW (PseudoREVIVE_W_TRUNC_M2 (i256 VRM2:$rs1), (VLMax), ReviveLog2SEW), 0),
+              (VLMax), ReviveLog2SEW)>;
 def : Pat<(i256 (sext_inreg (i256 VRM2:$rs1), i16)),
-          (REVIVE_W_SEXT (SRAI (SLLI (REVIVE_W_TRUNC (i256 VRM2:$rs1)), 48), 48))>;
+          (PseudoREVIVE_W_SEXT_M2
+              (SRAI (SLLI (PseudoREVIVE_W_TRUNC_M2 (i256 VRM2:$rs1), (VLMax), ReviveLog2SEW), 48), 48),
+              (VLMax), ReviveLog2SEW)>;
 def : Pat<(i256 (sext_inreg (i256 VRM2:$rs1), i8)),
-          (REVIVE_W_SEXT (SRAI (SLLI (REVIVE_W_TRUNC (i256 VRM2:$rs1)), 56), 56))>;
+          (PseudoREVIVE_W_SEXT_M2
+              (SRAI (SLLI (PseudoREVIVE_W_TRUNC_M2 (i256 VRM2:$rs1), (VLMax), ReviveLog2SEW), 56), 56),
+              (VLMax), ReviveLog2SEW)>;
 
 // Widening between the wide widths: build a zero of the wider type and insert
 // the narrower value as its low sub-register.
 def : Pat<(i512 (zext (i256 VRM2:$rs1))),
-          (INSERT_SUBREG (i512 (REVIVE_D_ZEXT (XLenVT X0))), (i256 VRM2:$rs1), sub_vrm2_0)>;
+          (INSERT_SUBREG (i512 (PseudoREVIVE_W_ZEXT_M4 (XLenVT X0), (VLMax), ReviveLog2SEW)),
+                         (i256 VRM2:$rs1), sub_vrm2_0)>;
 def : Pat<(i1024 (zext (i256 VRM2:$rs1))),
-          (INSERT_SUBREG (i1024 (REVIVE_Q_ZEXT (XLenVT X0))), (i256 VRM2:$rs1), sub_vrm2_0)>;
+          (INSERT_SUBREG (i1024 (PseudoREVIVE_W_ZEXT_M8 (XLenVT X0), (VLMax), ReviveLog2SEW)),
+                         (i256 VRM2:$rs1), sub_vrm2_0)>;
 def : Pat<(i1024 (zext (i512 VRM4:$rs1))),
-          (INSERT_SUBREG (i1024 (REVIVE_Q_ZEXT (XLenVT X0))), (i512 VRM4:$rs1), sub_vrm4_0)>;
+          (INSERT_SUBREG (i1024 (PseudoREVIVE_W_ZEXT_M8 (XLenVT X0), (VLMax), ReviveLog2SEW)),
+                         (i512 VRM4:$rs1), sub_vrm4_0)>;
 
 // Truncating between the wide widths: the low part of the wider register is the
 // narrower value, so this is a sub-register copy.

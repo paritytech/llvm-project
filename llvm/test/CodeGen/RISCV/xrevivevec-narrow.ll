@@ -76,6 +76,7 @@ define i64 @narrow_mul(i64 %a, i64 %b) {
 ;
 ; NOMUL-LABEL: narrow_mul:
 ; NOMUL:       # %bb.0:
+; NOMUL-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; NOMUL-NEXT:    revive.wzext v8, a0
 ; NOMUL-NEXT:    revive.wzext v10, a1
 ; NOMUL-NEXT:    revive.wmul v8, v8, v10
@@ -142,6 +143,7 @@ define i64 @narrow_add_1024(i64 %a, i64 %b) {
 define i64 @no_narrow_udiv(i64 %a, i64 %b) {
 ; CHECK-LABEL: no_narrow_udiv:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    revive.wzext v10, a1
 ; CHECK-NEXT:    revive.wdivu v8, v8, v10
@@ -158,6 +160,7 @@ define i64 @no_narrow_udiv(i64 %a, i64 %b) {
 define i64 @no_narrow_lshr(i64 %a) {
 ; CHECK-LABEL: no_narrow_lshr:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    li a0, 3
 ; CHECK-NEXT:    revive.wsrl v8, v8, a0
@@ -173,6 +176,7 @@ define i64 @no_narrow_lshr(i64 %a) {
 define i64 @no_narrow_slt(i64 %a, i64 %b) {
 ; CHECK-LABEL: no_narrow_slt:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    revive.wzext v10, a1
 ; CHECK-NEXT:    revive.wslt a0, v8, v10
@@ -188,6 +192,7 @@ define i64 @no_narrow_slt(i64 %a, i64 %b) {
 define i256 @narrow_and_wide_use(i64 %a, i64 %b, ptr %p) {
 ; CHECK-LABEL: narrow_and_wide_use:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
 ; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    revive.wzext v10, a1
 ; CHECK-NEXT:    revive.wadd v8, v8, v10
