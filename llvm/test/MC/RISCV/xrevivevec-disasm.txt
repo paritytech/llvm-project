@@ -1,6 +1,6 @@
 # RUN: llvm-mc -triple=riscv64 -mattr=+xrevivevec -disassemble %s \
 # RUN:     | FileCheck %s
-# RUN: not llvm-mc -triple=riscv64 -disassemble %s 2>&1 \
+# RUN: llvm-mc -triple=riscv64 -disassemble %s 2>&1 \
 # RUN:     | FileCheck -check-prefix=CHECK-NO-EXT %s
 
 # These instructions are compiler-generated, so this covers the decoder. Without
