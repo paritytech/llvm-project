@@ -3,9 +3,9 @@
 ; RUN:   -verify-machineinstrs < %s | FileCheck %s
 
 ; The extension's second width: i128 in one vector register, with an instruction
-; of its own for every operation i256 has one for. Nothing here passes an i128
-; in or out of a function, because the calling convention still only knows the
-; wider type; every value travels through memory instead.
+; of its own for every operation i256 has one for. Every value here travels
+; through memory rather than through an argument, so that each test pins one
+; operation; xrevivevec-i128-abi.ll covers the calling convention.
 
 define void @add_i128(ptr %p, ptr %q, ptr %r) {
 ; CHECK-LABEL: add_i128:

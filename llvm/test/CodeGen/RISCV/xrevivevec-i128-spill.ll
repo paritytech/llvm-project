@@ -5,9 +5,9 @@
 ; The narrower width spills and copies through instructions of its own, just as
 ; the wider one does: a single register rather than a pair, but the same ordinary
 ; fixed-size stack slots and the same absence of any vector instruction. The
-; calling convention has no arm for this width yet, so the pressure that forces a
-; spill comes from an inline-asm clobber of the whole register file rather than
-; from a call.
+; pressure that forces a spill comes from an inline-asm clobber of the whole
+; register file rather than from a call, so that what is pinned is the spill
+; itself rather than the calling convention.
 
 ; Two slots sixteen bytes apart, because a slot holds the width itself rather
 ; than the smallest vector register its class could describe; eight bytes of

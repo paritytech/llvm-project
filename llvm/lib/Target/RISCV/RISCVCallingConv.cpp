@@ -278,6 +278,17 @@ static bool CC_RISCVAssign2XLen(unsigned XLen, CCState &State, CCValAssign VA1,
   return false;
 }
 
+// The registers an XReviveVec wide type is passed in: a pair for i256, and one
+// of the singles that overlay those pairs for i128, where the option has made
+// it a machine type. Empty for every other type.
+static ArrayRef<MCPhysReg> getArgWideRegs(MVT LocVT) {
+  if (LocVT == MVT::i256)
+    return ArgVRM2s;
+  if (LocVT == MVT::i128)
+    return ArgVRs;
+  return {};
+}
+
 static MCRegister allocateRVVReg(MVT ValVT, unsigned ValNo, CCState &State,
                                  const RISCVTargetLowering &TLI) {
   const TargetRegisterClass *RC = TLI.getRegClassFor(ValVT);
@@ -460,12 +471,14 @@ bool llvm::CC_RISCV(unsigned ValNo, MVT ValVT, MVT LocVT,
   // be used regardless of whether the original argument was split during
   // legalisation or not. The argument will not be passed by registers if the
   // original type is larger than 2*XLEN, so the register alignment rule does
-  // not apply.
+  // not apply. Neither does it apply to a wide type, which consumes no integer
+  // register at all; i256 does not match the size in the first place.
   // TODO: To be compatible with GCC's behaviors, we don't align registers
   // currently if we are using ILP32E calling convention. This behavior may be
   // changed when RV32E/ILP32E is ratified.
   unsigned TwoXLenInBytes = (2 * XLen) / 8;
-  if (ArgFlags.isVarArg() && ArgFlags.getNonZeroOrigAlign() == TwoXLenInBytes &&
+  if (ArgFlags.isVarArg() && getArgWideRegs(LocVT).empty() &&
+      ArgFlags.getNonZeroOrigAlign() == TwoXLenInBytes &&
       DL.getTypeAllocSize(OrigTy) == TwoXLenInBytes &&
       ABI != RISCVABI::ABI_ILP32E) {
     unsigned RegIdx = State.getFirstUnallocated(ArgGPRs);
@@ -481,18 +494,21 @@ bool llvm::CC_RISCV(unsigned ValNo, MVT ValVT, MVT LocVT,
   assert(PendingLocs.size() == PendingArgFlags.size() &&
          "PendingLocs and PendingArgFlags out of sync");
 
-  // Pass i256 in a vector register pair instead of by reference, which costs
-  // ~112 bytes of marshalling per call site. Split arguments keep to the generic
-  // path, which owns the pending-location bookkeeping.
-  if (LocVT == MVT::i256 && !ArgFlags.isSplit() && PendingLocs.empty()) {
-    if (MCRegister Reg = State.AllocateReg(ArgVRM2s)) {
+  // Pass a wide type in the vector registers instead of by reference, which
+  // costs ~112 bytes of marshalling per call site. A mixed-width argument list
+  // interleaves because the singles overlay the pairs and the allocator tracks
+  // the aliases both ways. Split arguments keep to the generic path, which owns
+  // the pending-location bookkeeping.
+  ArrayRef<MCPhysReg> WideRegs = getArgWideRegs(LocVT);
+  if (!WideRegs.empty() && !ArgFlags.isSplit() && PendingLocs.empty()) {
+    if (MCRegister Reg = State.AllocateReg(WideRegs)) {
       State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
       return false;
     }
     // Out of registers. The slot is XLen-aligned rather than type-aligned:
-    // the wide accesses do not require alignment, and asking for 32 bytes
-    // would realign the stack of every function that runs out of them.
-    unsigned Offset = State.AllocateStack(32, Align(8));
+    // the wide accesses do not require alignment, and asking for the whole
+    // width would realign the stack of every function that runs out of them.
+    unsigned Offset = State.AllocateStack(LocVT.getStoreSize(), Align(8));
     State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
     return false;
   }
@@ -643,14 +659,15 @@ bool llvm::CC_RISCV_FastCC(unsigned ValNo, MVT ValVT, MVT LocVT,
   const RISCVTargetLowering &TLI = *Subtarget.getTargetLowering();
   RISCVABI::ABI ABI = Subtarget.getTargetABI();
 
-  // As above. revive gives its internal functions fastcc, so most i256
+  // As above. revive gives its internal functions fastcc, so most wide
   // arguments actually take this path.
-  if (LocVT == MVT::i256 && !ArgFlags.isSplit()) {
-    if (MCRegister Reg = State.AllocateReg(ArgVRM2s)) {
+  ArrayRef<MCPhysReg> WideRegs = getArgWideRegs(LocVT);
+  if (!WideRegs.empty() && !ArgFlags.isSplit()) {
+    if (MCRegister Reg = State.AllocateReg(WideRegs)) {
       State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
       return false;
     }
-    unsigned Offset = State.AllocateStack(32, Align(8));
+    unsigned Offset = State.AllocateStack(LocVT.getStoreSize(), Align(8));
     State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
     return false;
   }
