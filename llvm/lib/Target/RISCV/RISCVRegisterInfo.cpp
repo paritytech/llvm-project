@@ -545,10 +545,14 @@ bool RISCVRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                (Lo12 & 0b11111) != 0) {
       // Prefetch instructions require the offset to be 32 byte aligned.
       MI.getOperand(FIOperandNum + 1).ChangeToImmediate(0);
-    } else if ((Opc == RISCV::REVIVE_W_LD || Opc == RISCV::REVIVE_W_ST) &&
+    } else if ((Opc == RISCV::REVIVE_W_LD || Opc == RISCV::REVIVE_W_ST ||
+                Opc == RISCV::REVIVE_W_LD_128 ||
+                Opc == RISCV::REVIVE_W_ST_128) &&
                (Lo12 & 1) != 0) {
       // The offset of a wide memory instruction is even, and a byte aligned
-      // stack object can land at an odd one.
+      // stack object can land at an odd one. The narrower width spends the
+      // field's low bit on its own flag rather than on the offset, so the
+      // offset it takes is the same even value.
       MI.getOperand(FIOperandNum + 1).ChangeToImmediate(0);
     } else if (Opc == RISCV::MIPS_PREF && !isUInt<9>(Val)) {
       // MIPS Prefetch instructions require the offset to be 9 bits encoded.

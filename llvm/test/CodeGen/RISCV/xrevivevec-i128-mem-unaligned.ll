@@ -45,3 +45,39 @@ define void @load_store_even_offset(ptr %p, ptr %r) {
   store i128 %v, ptr %s, align 1
   ret void
 }
+
+declare void @escape(ptr)
+
+; A byte-aligned stack object can land at an odd offset from the stack pointer,
+; which the frame index elimination has to add rather than fold. It is the offset
+; that has to be even at this width too: the low bit of the field is the width
+; flag rather than part of the offset, so an odd one would not survive encoding.
+define void @load_odd_stack_offset(ptr %r) {
+; CHECK-LABEL: load_odd_stack_offset:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    addi sp, sp, -48
+; CHECK-NEXT:    .cfi_def_cfa_offset 48
+; CHECK-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s0, 32(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    .cfi_offset ra, -8
+; CHECK-NEXT:    .cfi_offset s0, -16
+; CHECK-NEXT:    mv s0, a0
+; CHECK-NEXT:    addi a0, sp, 29
+; CHECK-NEXT:    call escape
+; CHECK-NEXT:    addi a0, sp, 13
+; CHECK-NEXT:    revive.wld.i128 v8, 0(a0)
+; CHECK-NEXT:    revive.wst.i128 v8, 0(s0)
+; CHECK-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    .cfi_restore ra
+; CHECK-NEXT:    .cfi_restore s0
+; CHECK-NEXT:    addi sp, sp, 48
+; CHECK-NEXT:    .cfi_def_cfa_offset 0
+; CHECK-NEXT:    ret
+  %pad = alloca [3 x i8], align 1
+  %obj = alloca [16 x i8], align 1
+  call void @escape(ptr %pad)
+  %v = load i128, ptr %obj, align 1
+  store i128 %v, ptr %r, align 1
+  ret void
+}

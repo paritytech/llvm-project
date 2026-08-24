@@ -761,9 +761,8 @@ define void @ctz_zero_undef_i128(ptr %p, ptr %r) {
 
 ; There is no wide conditional move, so a select becomes the conditional-branch
 ; triangle its own pseudo expands to. Both arms are computed, so each sinks into
-; a branch of the triangle and the value needs no register copy: a copy of an
-; i128 is still an RVV whole-register move, which this configuration cannot
-; encode, until copyPhysReg learns the width.
+; a branch of the triangle and the value needs no register copy, which would
+; otherwise cost a move of its own at this width.
 define void @select_i128(ptr %p, ptr %q, ptr %r, i64 %c) {
 ; CHECK-LABEL: select_i128:
 ; CHECK:       # %bb.0:
@@ -814,9 +813,9 @@ define void @select_wide_cond(ptr %p, ptr %q, ptr %r) {
 }
 
 ; Sign-extending into the wider type while the narrow value stays live: the
-; pair's low half and the value itself have to end up in the same register,
-; since a copy would need the whole register vector move this configuration
-; cannot encode.
+; pair's low half and the value itself end up in the same register, so the
+; extension costs nothing beyond the shift; landing them apart would cost a
+; move of the low half as well.
 define void @sext_i128_still_live(ptr %p, ptr %q, ptr %r) {
 ; CHECK-LABEL: sext_i128_still_live:
 ; CHECK:       # %bb.0:

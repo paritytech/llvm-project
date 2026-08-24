@@ -528,6 +528,16 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     return;
   }
 
+  // The same at the narrower width, which is a single register rather than a
+  // pair. No check of -riscv-revive-i128 is needed: without the vector
+  // extensions, that option is the only thing that puts a value in one of these
+  // registers.
+  if (STI.hasVendorXReviveVec() && RISCV::VRRegClass.contains(DstReg, SrcReg)) {
+    BuildMI(MBB, MBBI, DL, get(RISCV::REVIVE_W_MV_128), DstReg)
+        .addReg(SrcReg, KillFlag | getRenamableRegState(RenamableSrc));
+    return;
+  }
+
   if (RISCV::GPRF16RegClass.contains(DstReg, SrcReg)) {
     BuildMI(MBB, MBBI, DL, get(RISCV::PseudoMV_FPR16INX), DstReg)
         .addReg(SrcReg, KillFlag | getRenamableRegState(RenamableSrc));
@@ -657,12 +667,14 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 // Whether a spill of this register class goes through the wide load and store rather
 // than the whole register vector ones.
 //
-// A pair of vector registers is exactly a wide register, so both reach the same bytes.
-// The wide instructions carry an offset of their own, where a whole register store needs
-// the address computed into a register first, and they address an ordinary fixed size
-// stack object rather than one whose offset is scaled by the vector length at run time.
+// A pair of vector registers is exactly a wide register, and a single one exactly a
+// register of the narrower width, so both reach the same bytes. The wide instructions
+// carry an offset of their own, where a whole register store needs the address computed
+// into a register first, and they address an ordinary fixed size stack object rather than
+// one whose offset is scaled by the vector length at run time.
 bool RISCVInstrInfo::isWideSpill(const TargetRegisterClass *RC) const {
-  return STI.hasVendorXReviveVec() && RISCV::VRM2RegClass.hasSubClassEq(RC);
+  return STI.hasVendorXReviveVec() && (RISCV::VRM2RegClass.hasSubClassEq(RC) ||
+                                       RISCV::VRRegClass.hasSubClassEq(RC));
 }
 
 // Restates a spill slot's size and alignment now that it is an ordinary stack object.
@@ -695,7 +707,8 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
     Opcode = RegInfo.getRegSizeInBits(RISCV::GPRRegClass) == 32 ? RISCV::SW
                                                                 : RISCV::SD;
   } else if (isWideSpill(RC)) {
-    Opcode = RISCV::REVIVE_W_ST;
+    Opcode = RISCV::VRRegClass.hasSubClassEq(RC) ? RISCV::REVIVE_W_ST_128
+                                                 : RISCV::REVIVE_W_ST;
     resizeVectorSpillSlot(MFI, FI, RC);
     Alignment = MFI.getObjectAlign(FI);
   } else if (RISCV::GPRF16RegClass.hasSubClassEq(RC)) {
@@ -800,7 +813,8 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     Opcode = RegInfo.getRegSizeInBits(RISCV::GPRRegClass) == 32 ? RISCV::LW
                                                                 : RISCV::LD;
   } else if (isWideSpill(RC)) {
-    Opcode = RISCV::REVIVE_W_LD;
+    Opcode = RISCV::VRRegClass.hasSubClassEq(RC) ? RISCV::REVIVE_W_LD_128
+                                                 : RISCV::REVIVE_W_LD;
     resizeVectorSpillSlot(MFI, FI, RC);
     Alignment = MFI.getObjectAlign(FI);
   } else if (RISCV::GPRF16RegClass.hasSubClassEq(RC)) {
