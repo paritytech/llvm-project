@@ -380,6 +380,21 @@ static bool isConvertibleToVMV_V_V(const RISCVSubtarget &STI,
   return false;
 }
 
+/// The extension's own register move for a chunk of `LMul` registers, standing in for `vmvNr.v`.
+static unsigned reviveWideMoveOpcode(RISCVVType::VLMUL LMul) {
+  switch (LMul) {
+  case RISCVVType::LMUL_8:
+    return RISCV::REVIVE_1024_MV;
+  case RISCVVType::LMUL_4:
+    return RISCV::REVIVE_512_MV;
+  case RISCVVType::LMUL_2:
+    return RISCV::REVIVE_256_MV;
+  default:
+    return RISCV::REVIVE_128_MV;
+  }
+}
+
+
 void RISCVInstrInfo::copyPhysRegVector(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
     const DebugLoc &DL, MCRegister DstReg, MCRegister SrcReg, bool KillSrc,
@@ -456,9 +471,15 @@ void RISCVInstrInfo::copyPhysRegVector(
         GetCopyInfo(SrcEncoding, DstEncoding);
     auto [NumCopied, _] = RISCVVType::decodeVLMUL(LMulCopied);
 
+    // The loop above decides how many registers this chunk covers; taking the width from it is
+    // what keeps a wide copy whole. Substituting the opcode here rather than short-circuiting the
+    // loop is the difference between copying a 256-bit value and copying half of one.
+    bool IsWideMove = STI.hasVendorXReviveVec();
     MachineBasicBlock::const_iterator DefMBBI;
-    if (LMul == LMulCopied &&
-        isConvertibleToVMV_V_V(STI, MBB, MBBI, DefMBBI, LMul)) {
+    if (IsWideMove) {
+      Opc = reviveWideMoveOpcode(LMulCopied);
+    } else if (LMul == LMulCopied &&
+               isConvertibleToVMV_V_V(STI, MBB, MBBI, DefMBBI, LMul)) {
       Opc = VVOpc;
       if (DefMBBI->getOpcode() == VIOpc)
         Opc = VIOpc;
@@ -661,6 +682,25 @@ static bool useFixedRVVSlot(MachineFrameInfo &MFI, int FI,
   return true;
 }
 
+// The extension's own wide access for a spill of `RC`, or zero when there is none.
+//
+// PolkaVM implements no standard vector instruction, so a wide spill cannot go through
+// `vsNr.v`/`vlNr.v`; these carry the same bytes and are the extension's own. The width comes from
+// vtype, which the vsetvli insertion establishes -- it runs after the vector register allocation
+// that creates these, so it sees them.
+static unsigned reviveWideSpillOpcode(const TargetRegisterClass *RC, bool IsLoad) {
+  // Widest first: a register of a wider group is reachable through the narrower classes too.
+  if (RISCV::VRM8RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::REVIVE_1024_LD : RISCV::REVIVE_1024_ST;
+  if (RISCV::VRM4RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::REVIVE_512_LD : RISCV::REVIVE_512_ST;
+  if (RISCV::VRM2RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::REVIVE_256_LD : RISCV::REVIVE_256_ST;
+  if (RISCV::VRRegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::REVIVE_128_LD : RISCV::REVIVE_128_ST;
+  return 0;
+}
+
 void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator I,
                                          Register SrcReg, bool IsKill, int FI,
@@ -670,6 +710,22 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   MachineFunction *MF = MBB.getParent();
   MachineFrameInfo &MFI = MF->getFrameInfo();
   Align Alignment = MFI.getObjectAlign(FI);
+
+  if (STI.hasVendorXReviveVec()) {
+    if (unsigned Wide = reviveWideSpillOpcode(RC, /*IsLoad=*/false)) {
+      useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
+      MachineMemOperand *MMO = MF->getMachineMemOperand(
+          MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
+          TypeSize::getFixed(MFI.getObjectSize(FI)), MFI.getObjectAlign(FI));
+      BuildMI(MBB, I, DebugLoc(), get(Wide))
+          .addReg(SrcReg, getKillRegState(IsKill))
+          .addFrameIndex(FI)
+          .addImm(0)
+          .addMemOperand(MMO)
+          .setMIFlag(Flags);
+      return;
+    }
+  }
 
   unsigned Opcode;
   if (RISCV::GPRRegClass.hasSubClassEq(RC)) {
@@ -766,6 +822,21 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   Align Alignment = MFI.getObjectAlign(FI);
   DebugLoc DL =
       Flags & MachineInstr::FrameDestroy ? MBB.findDebugLoc(I) : DebugLoc();
+
+  if (STI.hasVendorXReviveVec()) {
+    if (unsigned Wide = reviveWideSpillOpcode(RC, /*IsLoad=*/true)) {
+      useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
+      MachineMemOperand *MMO = MF->getMachineMemOperand(
+          MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
+          TypeSize::getFixed(MFI.getObjectSize(FI)), MFI.getObjectAlign(FI));
+      BuildMI(MBB, I, DL, get(Wide), DstReg)
+          .addFrameIndex(FI)
+          .addImm(0)
+          .addMemOperand(MMO)
+          .setMIFlag(Flags);
+      return;
+    }
+  }
 
   unsigned Opcode;
   if (RISCV::GPRRegClass.hasSubClassEq(RC)) {

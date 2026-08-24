@@ -27,10 +27,6 @@
 
 using namespace llvm;
 
-// SEW for the XReviveVec pseudos; nothing reads it, but a vtype must name one.
-// Must match the .td.
-static constexpr unsigned ReviveLog2SEW = 6;
-
 #define DEBUG_TYPE "riscv-isel"
 #define PASS_NAME "RISC-V DAG->DAG Pattern Instruction Selection"
 
@@ -1042,15 +1038,10 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
           selectImm(CurDAG, DL, XLenVT,
                     IsSigned ? Value.getSExtValue() : Value.getZExtValue(),
                     *Subtarget);
-      // The pseudo reads vtype for its width, so it carries the AVL and SEW
-      // that name LMUL=2.
-      SDValue Ops[] = {Materialised,
-                       CurDAG->getTargetConstant(RISCV::VLMaxSentinel, DL, XLenVT),
-                       CurDAG->getTargetConstant(ReviveLog2SEW, DL, XLenVT)};
       ReplaceNode(Node, CurDAG->getMachineNode(
-                            IsSigned ? RISCV::PseudoREVIVE_W_SEXT_M2
-                                     : RISCV::PseudoREVIVE_W_ZEXT_M2,
-                            DL, MVT::i256, Ops));
+                            IsSigned ? RISCV::REVIVE_256_SEXT
+                                     : RISCV::REVIVE_256_ZEXT,
+                            DL, MVT::i256, Materialised));
       return;
     }
     assert(VT == Subtarget->getXLenVT() && "Unexpected VT");

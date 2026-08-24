@@ -295,14 +295,6 @@ public:
   // Vector codegen related methods.
   bool hasVInstructions() const { return HasStdExtZve32x; }
 
-  /// Whether `vl` and `vtype` survive a call.
-  ///
-  /// XReviveVec's instructions read `vtype` for their width, and re-establishing it
-  /// after every call cost 4.6% of .text. The obligation is on the callee: a function
-  /// that changes `vtype` must leave it as it found it. That holds for what revive
-  /// emits, where every wide operation is LMUL=2, so a callee either sets the value
-  /// the caller already had or never writes it at all.
-  bool hasCallPreservedVType() const { return hasVendorXReviveVec(); }
   bool hasVInstructionsI64() const { return HasStdExtZve64x; }
   bool hasVInstructionsF16Minimal() const { return HasStdExtZvfhmin; }
   bool hasVInstructionsF16() const { return HasStdExtZvfh; }

@@ -208,6 +208,13 @@ unsigned RISCVSubtarget::getMaxLMULForFixedLengthVectors() const {
 }
 
 bool RISCVSubtarget::useRVVForFixedLengthVectors() const {
+  // XReviveVec holds wide integers in the vector registers and configures `vtype` to say how
+  // wide, so it needs the vector extensions present -- but it wants nothing else from them.
+  // Letting fixed-length vectors be legal hands the vectorizers and the memory intrinsics the
+  // whole RVV menu, of which PolkaVM implements none: a twenty byte copy came out as `vle8.v`.
+  if (hasVendorXReviveVec())
+    return false;
+
   return hasVInstructions() &&
          getMinRVVVectorSizeInBits() >= RISCV::RVVBitsPerBlock;
 }
