@@ -21,6 +21,27 @@
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
+// Operands
+//===----------------------------------------------------------------------===//
+
+// The offset a wide memory instruction takes: a 12-bit signed immediate whose
+// least significant bit is zero.
+//
+// Constants only, where a scalar load or store also accepts the low part of a
+// symbol. The PolkaVM linker decodes these instructions whole and rejects a
+// relocation against one, so a symbol has to be added to the address register
+// instead. Even only, because the low bit of the field selects between the wide
+// types; it stays where it is encoded rather than being shifted out, so that the
+// narrower types find it in the same place.
+def simm12_lsb0 : RISCVOp,
+                  ImmLeaf<XLenVT, [{return isShiftedInt<11, 1>(Imm);}]> {
+  let ParserMatchClass = SImmAsmOperand<12, "Lsb0">;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeSImmLsb0Operand<12>";
+  let OperandType = "OPERAND_SIMM12_LSB0";
+}
+
+//===----------------------------------------------------------------------===//
 // DAG nodes
 //===----------------------------------------------------------------------===//
 
@@ -159,7 +180,7 @@ def ST#suffix : RVInstS<0b101, OPC_CUSTOM_2, (outs),
 } // Predicates = [HasVendorXReviveVec]
 }
 
-defm REVIVE_W_ : RVReviveOps<0, VRM2, "", "", simm12_lo>;
+defm REVIVE_W_ : RVReviveOps<0, VRM2, "", "", simm12_lsb0>;
 
 //===----------------------------------------------------------------------===//
 // Routines that revive currently open-codes in stdlib.ll
@@ -183,6 +204,11 @@ def REVIVE_W_SIGNEXT: RVReviveALU<0, 0b001011, VRM2, "revive.wsignextend">;
 //===----------------------------------------------------------------------===//
 // Selection patterns
 //===----------------------------------------------------------------------===//
+
+// The addressing mode of the wide memory instructions: only an even constant
+// offset folds into the instruction, so a symbol or an odd offset is left in the
+// address for a scalar instruction to add.
+def AddrRegImmWide : ComplexPattern<iPTR, 2, "SelectAddrRegImmWide">;
 
 // The patterns for one wide type, naming the instructions RVReviveOps defined
 // for it.
@@ -299,14 +325,14 @@ def : Pat<(vt (sextloadi16 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
 def : Pat<(vt (sextloadi32 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
           (W_SEXT (LW GPR:$rs1, simm12_lo:$imm12))>;
 
-def : Pat<(vt (load (AddrRegImm (XLenVT GPR:$rs1), memimm:$imm12))),
+def : Pat<(vt (load (AddrRegImmWide (XLenVT GPR:$rs1), memimm:$imm12))),
           (W_LD GPR:$rs1, memimm:$imm12)>;
-def : Pat<(store (vt valty:$rs2), (AddrRegImm (XLenVT GPR:$rs1), memimm:$imm12)),
+def : Pat<(store (vt valty:$rs2), (AddrRegImmWide (XLenVT GPR:$rs1), memimm:$imm12)),
           (W_ST (vt valty:$rs2), GPR:$rs1, memimm:$imm12)>;
 }
 
 let Predicates = [HasVendorXReviveVec] in {
-defm : RVRevivePats<i256, VRM2, "", simm12_lo>;
+defm : RVRevivePats<i256, VRM2, "", simm12_lsb0>;
 
 // The stdlib replacements. These are reached through intrinsics rather than
 // ordinary IR because they have no LLVM opcode.

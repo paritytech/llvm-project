@@ -550,6 +550,17 @@ static DecodeStatus decodeSImmNonZeroOperand(MCInst &Inst, uint32_t Imm,
   return decodeSImmOperand<N>(Inst, Imm, Address, Decoder);
 }
 
+// The low bit of the immediate belongs to the opcode rather than to the offset,
+// so a word that sets it is not an encoding of this instruction at all.
+template <unsigned N>
+static DecodeStatus decodeSImmLsb0Operand(MCInst &Inst, uint32_t Imm,
+                                          int64_t Address,
+                                          const MCDisassembler *Decoder) {
+  if (Imm & 1)
+    return MCDisassembler::Fail;
+  return decodeSImmOperand<N>(Inst, Imm, Address, Decoder);
+}
+
 template <unsigned T, unsigned N>
 static DecodeStatus decodeSImmOperandAndLslN(MCInst &Inst, uint32_t Imm,
                                              int64_t Address,

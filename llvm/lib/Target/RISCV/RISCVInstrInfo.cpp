@@ -3126,6 +3126,9 @@ bool RISCVInstrInfo::verifyInstruction(const MachineInstr &MI,
         case RISCVOp::OPERAND_VTYPEI11:
           Ok = isUInt<11>(Imm);
           break;
+        case RISCVOp::OPERAND_SIMM12_LSB0:
+          Ok = isShiftedInt<11, 1>(Imm);
+          break;
         case RISCVOp::OPERAND_SIMM12_LSB00000:
           Ok = isShiftedInt<7, 5>(Imm);
           break;

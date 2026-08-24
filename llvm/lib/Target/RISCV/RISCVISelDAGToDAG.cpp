@@ -3363,6 +3363,39 @@ bool RISCVDAGToDAGISel::SelectAddrRegImmLsb00000(SDValue Addr, SDValue &Base,
   return true;
 }
 
+/// The addressing mode of the XReviveVec wide memory instructions: an even
+/// constant offset, or nothing at all.
+///
+/// Unlike SelectAddrRegImm this folds neither the low part of a symbol, which
+/// the PolkaVM linker will not relocate inside one of these instructions, nor an
+/// odd offset, which the encoding no longer has room for. Both are left in the
+/// address, where a scalar instruction adds them. An offset too large to fold
+/// stays in the address whole rather than being split the way SelectAddrRegImm
+/// splits one, because the two halves of such a split are not both even.
+bool RISCVDAGToDAGISel::SelectAddrRegImmWide(SDValue Addr, SDValue &Base,
+                                             SDValue &Offset) {
+  if (SelectAddrFrameIndex(Addr, Base, Offset))
+    return true;
+
+  SDLoc DL(Addr);
+  MVT VT = Addr.getSimpleValueType();
+
+  if (CurDAG->isBaseWithConstantOffset(Addr)) {
+    int64_t CVal = cast<ConstantSDNode>(Addr.getOperand(1))->getSExtValue();
+    if (isShiftedInt<11, 1>(CVal)) {
+      Base = Addr.getOperand(0);
+      if (auto *FIN = dyn_cast<FrameIndexSDNode>(Base))
+        Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), VT);
+      Offset = CurDAG->getSignedTargetConstant(CVal, DL, VT);
+      return true;
+    }
+  }
+
+  Base = Addr;
+  Offset = CurDAG->getTargetConstant(0, DL, VT);
+  return true;
+}
+
 /// Return true if this a load/store that we have a RegRegScale instruction for.
 static bool isRegRegScaleLoadOrStore(SDNode *User, SDValue Add,
                                      const RISCVSubtarget &Subtarget) {

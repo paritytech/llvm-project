@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=riscv64 -mattr=+xrevivevec -disassemble %s \
 # RUN:     | FileCheck %s
+# RUN: llvm-mc -triple=riscv64 -mattr=+xrevivevec -disassemble %s 2>&1 \
+# RUN:     | FileCheck -check-prefix=CHECK-ODD %s
 # RUN: llvm-mc -triple=riscv64 -disassemble %s 2>&1 \
 # RUN:     | FileCheck -check-prefix=CHECK-NO-EXT %s
 
@@ -85,9 +87,27 @@
 # CHECK: revive.wst	v8, 0(a0)
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x50,0x85,0x00
+# The offset is the plain immediate field, not a shifted one: 16 is encoded as
+# 16 even though the low bit of the field can never be set.
+# CHECK: revive.wld	v8, 16(a0)
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x44,0x05,0x01
+# CHECK: revive.wst	v8, 16(a0)
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x58,0x85,0x00
 # CHECK: revive.wzext	v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x74,0x05,0x00
 # CHECK: revive.wsext	v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x74,0x05,0x02
+
+# The low bit of a wide memory offset is reserved for selecting the width, so a
+# word that sets it decodes as nothing, extension or no extension. These two are
+# the loads and stores above with 1 added to the offset field.
+# CHECK-ODD: invalid instruction encoding
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x44,0x15,0x01
+# CHECK-ODD: invalid instruction encoding
+# CHECK-NO-EXT: invalid instruction encoding
+0xdb,0x58,0x85,0x00

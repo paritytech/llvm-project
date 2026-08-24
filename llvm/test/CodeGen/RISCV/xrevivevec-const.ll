@@ -73,6 +73,19 @@ define i256 @const_wide() {
   ret i256 6277101733925179126504886505003981583386072424808101969920
 }
 
+; Significant bits at both ends, so no shift of an XLen value reaches it and it
+; comes from the pool. The offset of a wide load cannot carry a relocation, so
+; the pool address is materialized in full and the load takes offset zero.
+define i256 @const_pool() {
+; CHECK-LABEL: const_pool:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lui a0, %hi(.LCPI7_0)
+; CHECK-NEXT:    addi a0, a0, %lo(.LCPI7_0)
+; CHECK-NEXT:    revive.wld v8, 0(a0)
+; CHECK-NEXT:    ret
+  ret i256 123456789123456789123456789123456789
+}
+
 define i256 @const_operand(i256 %a) {
 ; CHECK-LABEL: const_operand:
 ; CHECK:       # %bb.0:
