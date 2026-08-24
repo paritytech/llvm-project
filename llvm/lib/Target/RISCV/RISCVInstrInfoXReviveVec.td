@@ -370,6 +370,32 @@ def : Pat<(store (vt valty:$rs2), (AddrRegImmWide (XLenVT GPR:$rs1), memimm:$imm
 
 let Predicates = [HasVendorXReviveVec] in {
 defm : RVRevivePats<i256, VRM2, "", simm12_lsb0>;
+// Inert unless -riscv-revive-i128 has made the type legal.
+defm : RVRevivePats<i128, VR, "_128", simm12_lsb0_widthflag>;
+
+// Converting between the two wide types, which only arises once both are legal.
+// The register forms are subregister moves rather than instructions, so they
+// need patterns of their own: the width-parameterized ones above each cover a
+// single type and an XLen one.
+def : Pat<(i128 (trunc (i256 VRM2:$src))),
+          (EXTRACT_SUBREG (i256 VRM2:$src), sub_vrm1_0)>;
+// The pair is built rather than written into, so that both halves are ordinary
+// definitions the register allocator can place in the pair itself; inserting
+// into an already zeroed pair leaves a copy behind instead.
+def : Pat<(i256 (zext (i128 VR:$src))),
+          (REG_SEQUENCE VRM2, (i128 VR:$src), sub_vrm1_0,
+                              (i128 (REVIVE_W_ZEXT_128 (XLenVT X0))),
+                              sub_vrm1_1)>;
+// An any_extend leaves the high half undefined.
+def : Pat<(i256 (anyext (i128 VR:$src))),
+          (INSERT_SUBREG (i256 (IMPLICIT_DEF)), (i128 VR:$src), sub_vrm1_0)>;
+// The sign fills the high half, which is the low half shifted right by all but
+// its sign bit.
+def : Pat<(i256 (sext (i128 VR:$src))),
+          (REG_SEQUENCE VRM2, (i128 VR:$src), sub_vrm1_0,
+                              (i128 (REVIVE_W_SRA_128 (i128 VR:$src),
+                                                      (ADDI (XLenVT X0), 127))),
+                              sub_vrm1_1)>;
 
 // The stdlib replacements. These are reached through intrinsics rather than
 // ordinary IR because they have no LLVM opcode.
@@ -389,5 +415,7 @@ def : Pat<(int_riscv_revive_signextend (i256 VRM2:$rs1), (i256 VRM2:$rs2)),
 
 // The same conditional-branch triangle as the scalar select; there is no wide
 // conditional move to fold into.
-let Predicates = [HasVendorXReviveVec] in
+let Predicates = [HasVendorXReviveVec] in {
 defm Select_VRM2 : SelectCC_GPR_rrirr<VRM2, i256>;
+defm Select_VR : SelectCC_GPR_rrirr<VR, i128>;
+}

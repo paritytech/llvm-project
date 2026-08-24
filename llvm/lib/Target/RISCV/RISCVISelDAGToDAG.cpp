@@ -1024,11 +1024,11 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
 
   switch (Opcode) {
   case ISD::Constant: {
-    if (VT == MVT::i256) {
-      // Build XLen-sized values in a register instead of a 32-byte pool entry
-      // plus its load. Done here rather than in lowering because a ZERO_EXTEND
-      // of a constant folds back into one; wider values became a pool load
-      // during legalization and never reach this point.
+    if (VT == MVT::i256 || VT == MVT::i128) {
+      // Build XLen-sized values in a register instead of a pool entry of the
+      // value's whole width plus its load. Done here rather than in lowering
+      // because a ZERO_EXTEND of a constant folds back into one; wider values
+      // became a pool load during legalization and never reach this point.
       const APInt &Value = Node->getAsAPIntVal();
       bool IsSigned = Value.getActiveBits() > 64;
       assert((!IsSigned || Value.getSignificantBits() <= 64) &&
@@ -1038,10 +1038,12 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
           selectImm(CurDAG, DL, XLenVT,
                     IsSigned ? Value.getSExtValue() : Value.getZExtValue(),
                     *Subtarget);
-      ReplaceNode(Node, CurDAG->getMachineNode(
-                            IsSigned ? RISCV::REVIVE_W_SEXT
-                                     : RISCV::REVIVE_W_ZEXT,
-                            DL, MVT::i256, Materialised));
+      unsigned Widen;
+      if (VT == MVT::i256)
+        Widen = IsSigned ? RISCV::REVIVE_W_SEXT : RISCV::REVIVE_W_ZEXT;
+      else
+        Widen = IsSigned ? RISCV::REVIVE_W_SEXT_128 : RISCV::REVIVE_W_ZEXT_128;
+      ReplaceNode(Node, CurDAG->getMachineNode(Widen, DL, VT, Materialised));
       return;
     }
     assert(VT == Subtarget->getXLenVT() && "Unexpected VT");

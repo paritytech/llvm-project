@@ -796,7 +796,7 @@ defvar VM8VTs = [vint8m8_t, vint16m8_t, vint32m8_t, vint64m8_t,
 // allocation of higher lmul register groups while still putting v0 last in the
 // allocation order.
 
-def VR : VReg<!listconcat(VM1VTs, VMaskVTs),
+def VR : VReg<!listconcat(VM1VTs, VMaskVTs, [i128]),
               (add (sequence "V%u", 8, 31),
                    (sequence "V%u", 7, 0)), 1>;
 

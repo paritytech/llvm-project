@@ -87,6 +87,19 @@ static cl::opt<bool>
                                "be combined with a shift"),
                       cl::init(true));
 
+// Set to true for XReviveVec's second width, where i128 is a machine type of
+// its own instead of a pair of limbs. Lets both be measured with one compiler.
+static cl::opt<bool> ReviveI128(
+    "riscv-revive-i128", cl::Hidden, cl::init(false),
+    cl::desc("make i128 a legal type, held in one vector register, alongside "
+             "XReviveVec's i256"));
+
+// The types XReviveVec holds in the vector registers rather than in limbs: i256
+// always, i128 only where the option above has made it a machine type.
+static bool isReviveWideVT(EVT VT) {
+  return VT == MVT::i256 || (ReviveI128 && VT == MVT::i128);
+}
+
 // TODO: Support more ops
 static const unsigned ZvfbfaVPOps[] = {
     ISD::VP_FNEG, ISD::VP_FABS, ISD::VP_FCOPYSIGN};
@@ -156,9 +169,13 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   }
 
   // With a register class, type legalization stops expanding i256 into i64
-  // limbs and the operations below select as single instructions.
+  // limbs and the operations below select as single instructions. i128 gets one
+  // too where the option asks for it: a single register, being half as wide.
+  const bool HasReviveI128 = Subtarget.hasVendorXReviveVec() && ReviveI128;
   if (Subtarget.hasVendorXReviveVec())
     addRegisterClass(MVT::i256, &RISCV::VRM2RegClass);
+  if (HasReviveI128)
+    addRegisterClass(MVT::i128, &RISCV::VRRegClass);
 
   static const MVT::SimpleValueType BoolVecVTs[] = {
       MVT::nxv1i1,  MVT::nxv2i1,  MVT::nxv4i1, MVT::nxv8i1,
@@ -320,66 +337,76 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::DYNAMIC_STACKALLOC, XLenVT, Custom);
 
   if (Subtarget.hasVendorXReviveVec()) {
-    // One instruction each; see RISCVInstrInfoXReviveVec.td.
-    setOperationAction({ISD::ADD, ISD::SUB, ISD::MUL, ISD::AND, ISD::OR,
-                        ISD::XOR, ISD::SHL, ISD::SRL, ISD::SRA, ISD::UDIV,
-                        ISD::SDIV, ISD::UREM, ISD::SREM, ISD::SETCC,
-                        ISD::LOAD, ISD::STORE, ISD::ZERO_EXTEND,
-                        ISD::SIGN_EXTEND, ISD::ANY_EXTEND, ISD::BSWAP},
-                       MVT::i256, Legal);
+    // Both widths take the same actions, at the width's own instructions.
+    for (MVT WideVT : {MVT::i256, MVT::i128}) {
+      if (WideVT == MVT::i128 && !HasReviveI128)
+        continue;
 
-    // Only four compares have instructions; the rest are reached by swapping
-    // operands or inverting, which Expand makes the legalizer do.
-    setCondCodeAction({ISD::SETLE, ISD::SETULE, ISD::SETGE, ISD::SETUGE},
-                      MVT::i256, Expand);
+      // One instruction each; see RISCVInstrInfoXReviveVec.td.
+      setOperationAction({ISD::ADD, ISD::SUB, ISD::MUL, ISD::AND, ISD::OR,
+                          ISD::XOR, ISD::SHL, ISD::SRL, ISD::SRA, ISD::UDIV,
+                          ISD::SDIV, ISD::UREM, ISD::SREM, ISD::SETCC,
+                          ISD::LOAD, ISD::STORE, ISD::ZERO_EXTEND,
+                          ISD::SIGN_EXTEND, ISD::ANY_EXTEND, ISD::BSWAP},
+                         WideVT, Legal);
 
-    // A 256-bit immediate has no encoding, so constants are materialised from
-    // the constant pool; selects need control flow, as they do for XLenVT.
-    setOperationAction({ISD::Constant, ISD::SELECT, ISD::SIGN_EXTEND_INREG},
-                       MVT::i256, Custom);
+      // Only four compares have instructions; the rest are reached by swapping
+      // operands or inverting, which Expand makes the legalizer do.
+      setCondCodeAction({ISD::SETLE, ISD::SETULE, ISD::SETGE, ISD::SETUGE},
+                        WideVT, Expand);
 
-    // Expand the rest explicitly, so an unhandled node cannot reach ISel.
-    // Only the full-width access has an instruction; narrower ones become a
-    // truncate or extend feeding an XLen access.
-    // i128 is not legal, so the generic truncating-store expansion has nothing
-    // to truncate to; lowered by hand as two limb stores.
-    setTruncStoreAction(MVT::i256, MVT::i128, Custom);
-    setLoadExtAction({ISD::EXTLOAD, ISD::SEXTLOAD, ISD::ZEXTLOAD}, MVT::i256,
-                     MVT::i128, Custom);
+      // A wide immediate has no encoding, so constants are materialised from
+      // the constant pool; selects need control flow, as they do for XLenVT.
+      setOperationAction({ISD::Constant, ISD::SELECT, ISD::SIGN_EXTEND_INREG},
+                         WideVT, Custom);
 
-    for (MVT Narrow : {MVT::i8, MVT::i16, MVT::i32, MVT::i64}) {
-      setTruncStoreAction(MVT::i256, Narrow, Expand);
-      // EXTLOAD is left alone: LegalizeDAG asserts it is always supported.
-      setLoadExtAction({ISD::SEXTLOAD, ISD::ZEXTLOAD}, MVT::i256, Narrow,
-                       Expand);
+      // Expand the rest explicitly, so an unhandled node cannot reach ISel.
+      setOperationAction({ISD::SELECT_CC, ISD::BR_CC, ISD::BITREVERSE,
+                          ISD::ROTL, ISD::ROTR, ISD::SDIVREM, ISD::UDIVREM,
+                          ISD::MULHS, ISD::MULHU, ISD::SMUL_LOHI,
+                          ISD::UMUL_LOHI,
+                          ISD::UADDO, ISD::USUBO, ISD::SADDO, ISD::SSUBO,
+                          ISD::SMULO, ISD::UMULO, ISD::UADDO_CARRY,
+                          ISD::USUBO_CARRY,
+                          ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX,
+                          ISD::ABS, ISD::SADDSAT, ISD::UADDSAT, ISD::SSUBSAT,
+                          ISD::USUBSAT},
+                         WideVT, Expand);
 
-      // A store of a narrow value into a wider memory type is not a truncation
-      // at all, and the default action for the pair is Legal. Left that way the
-      // store merger builds them out of XLen stores, legalisation splits them
-      // back into XLen stores, and the two never converge. It only becomes
-      // reachable here because a legal i256 makes i128 promote rather than
-      // expand.
-      for (MVT Wide : {MVT::i128, MVT::i256})
-        setTruncStoreAction(Narrow, Wide, Expand);
+      // Counting bits cannot be expanded at these widths: the generic code
+      // gives up and asks for a libcall that does not exist. Each has an
+      // instruction, and its result is an XLen value that widens back.
+      setOperationAction({ISD::CTPOP, ISD::CTLZ, ISD::CTTZ,
+                          ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ_ZERO_UNDEF},
+                         WideVT, Custom);
+
+      // Only the full-width access has an instruction; narrower ones become a
+      // truncate or extend feeding an XLen access.
+      for (MVT Narrow : {MVT::i8, MVT::i16, MVT::i32, MVT::i64}) {
+        setTruncStoreAction(WideVT, Narrow, Expand);
+        // EXTLOAD is left alone: LegalizeDAG asserts it is always supported.
+        setLoadExtAction({ISD::SEXTLOAD, ISD::ZEXTLOAD}, WideVT, Narrow,
+                         Expand);
+      }
     }
 
-    setOperationAction({ISD::SELECT_CC, ISD::BR_CC, ISD::BITREVERSE, ISD::ROTL,
-                        ISD::ROTR, ISD::SDIVREM, ISD::UDIVREM, ISD::MULHS,
-                        ISD::MULHU, ISD::SMUL_LOHI, ISD::UMUL_LOHI,
-                        ISD::UADDO, ISD::USUBO, ISD::SADDO, ISD::SSUBO,
-                        ISD::SMULO, ISD::UMULO, ISD::UADDO_CARRY,
-                        ISD::USUBO_CARRY,
-                        ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX,
-                        ISD::ABS, ISD::SADDSAT, ISD::UADDSAT, ISD::SSUBSAT,
-                        ISD::USUBSAT},
-                       MVT::i256, Expand);
+    // An i128 access of an i256 value. Where i128 is a machine type the generic
+    // expansion converts between the two widths and accesses memory once, and
+    // where it is not it has nothing to truncate to, so both are lowered by
+    // hand as two limb accesses.
+    setTruncStoreAction(MVT::i256, MVT::i128, HasReviveI128 ? Expand : Custom);
+    setLoadExtAction({ISD::EXTLOAD, ISD::SEXTLOAD, ISD::ZEXTLOAD}, MVT::i256,
+                     MVT::i128, HasReviveI128 ? Expand : Custom);
 
-    // Counting bits cannot be expanded at this width: the generic code gives up
-    // and asks for a libcall that does not exist. Each has an instruction, and
-    // its result is an XLen value that widens back.
-    setOperationAction({ISD::CTPOP, ISD::CTLZ, ISD::CTTZ, ISD::CTLZ_ZERO_UNDEF,
-                        ISD::CTTZ_ZERO_UNDEF},
-                       MVT::i256, Custom);
+    // A store of a narrow value into a wider memory type is not a truncation at
+    // all, and the default action for the pair is Legal. Left that way the
+    // store merger builds them out of XLen stores, legalisation splits them
+    // back into XLen stores, and the two never converge. It only becomes
+    // reachable here because a legal wide type makes i128 promote rather than
+    // expand.
+    for (MVT Narrow : {MVT::i8, MVT::i16, MVT::i32, MVT::i64})
+      for (MVT Wide : {MVT::i128, MVT::i256})
+        setTruncStoreAction(Narrow, Wide, Expand);
   }
 
   setOperationAction(ISD::BR_JT, MVT::Other, Expand);
@@ -429,7 +456,10 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   if (!Subtarget.hasStdExtZmmul()) {
     setOperationAction({ISD::MUL, ISD::MULHS, ISD::MULHU}, XLenVT, Expand);
   } else if (Subtarget.is64Bit()) {
-    setOperationAction(ISD::MUL, MVT::i128, Custom);
+    // The custom lowering splits an i128 multiply into XLen ones, which a legal
+    // i128 has no need of: it multiplies with one instruction.
+    if (!HasReviveI128)
+      setOperationAction(ISD::MUL, MVT::i128, Custom);
     setOperationAction(ISD::MUL, MVT::i32, Custom);
   } else {
     setOperationAction(ISD::MUL, MVT::i64, Custom);
@@ -496,10 +526,14 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   if (!Subtarget.hasCPOPLike()) {
     // TODO: These should be set to LibCall, but this currently breaks
     //   the Linux kernel build. See #101786. Lacks i128 tests, too.
-    if (Subtarget.is64Bit())
-      setOperationAction(ISD::CTPOP, MVT::i128, Expand);
-    else
+    if (Subtarget.is64Bit()) {
+      // A legal i128 counts its bits with the extension's own instruction,
+      // through the Custom lowering set above.
+      if (!HasReviveI128)
+        setOperationAction(ISD::CTPOP, MVT::i128, Expand);
+    } else {
       setOperationAction(ISD::CTPOP, MVT::i32, Expand);
+    }
     setOperationAction(ISD::CTPOP, MVT::i64, Expand);
   }
 
@@ -7147,8 +7181,11 @@ static cl::opt<bool> ReviveWideConstInReg(
     cl::desc("build wide constants that fit an XLen register in one, rather "
              "than loading them from the constant pool"));
 
-// A 256-bit immediate has no encoding, so anything that does not fit an XLen
-// register comes from the constant pool.
+// A wide immediate has no encoding, so anything that does not fit an XLen
+// register comes from the constant pool. The pool entry is the value's own
+// width, and the load of it is the wide instruction of that width: the address
+// is materialised in full beforehand, because no relocation may land on a wide
+// instruction, so the load itself carries offset zero at either width.
 static SDValue lowerWideConstant(SDValue Op, SelectionDAG &DAG,
                                  const RISCVSubtarget &Subtarget) {
   SDLoc DL(Op);
@@ -7232,12 +7269,12 @@ static SDValue lowerWideBitCount(SDValue Op, SelectionDAG &DAG,
   SDLoc DL(Op);
   SDValue Count =
       DAG.getNode(Opcode, DL, Subtarget.getXLenVT(), Op.getOperand(0));
-  return DAG.getNode(RISCVISD::WIDE_ZEXT, DL, MVT::i256, Count);
+  return DAG.getNode(RISCVISD::WIDE_ZEXT, DL, Op.getValueType(), Count);
 }
 
 static SDValue lowerConstant(SDValue Op, SelectionDAG &DAG,
                              const RISCVSubtarget &Subtarget) {
-  if (Op.getValueType() == MVT::i256)
+  if (isReviveWideVT(Op.getValueType()))
     return lowerWideConstant(Op, DAG, Subtarget);
 
   assert(Op.getValueType() == MVT::i64 && "Unexpected VT");
@@ -7964,7 +8001,7 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     // Sign-extending a narrow field of a wide value. Do it in an XLen register,
     // where the target already has the instructions, and widen the result.
     EVT ExtVT = cast<VTSDNode>(Op.getOperand(1))->getVT();
-    assert(Op.getValueType() == MVT::i256 &&
+    assert(isReviveWideVT(Op.getValueType()) &&
            ExtVT.getSizeInBits() <= Subtarget.getXLen() &&
            "Unexpected sign_extend_inreg");
     SDLoc DL(Op);
@@ -7972,7 +8009,7 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     SDValue Narrow = DAG.getNode(ISD::TRUNCATE, DL, XLenVT, Op.getOperand(0));
     SDValue Signed = DAG.getNode(ISD::SIGN_EXTEND_INREG, DL, XLenVT, Narrow,
                                  Op.getOperand(1));
-    return DAG.getNode(RISCVISD::WIDE_SEXT, DL, MVT::i256, Signed);
+    return DAG.getNode(RISCVISD::WIDE_SEXT, DL, Op.getValueType(), Signed);
   }
   case ISD::BRCOND:
     return lowerBRCOND(Op, DAG);
@@ -8642,8 +8679,9 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
   case ISD::LOAD: {
     auto *Load = cast<LoadSDNode>(Op);
     EVT VT = Load->getValueType(0);
-    // i128 is not legal, so as with the matching store the generic expansion is
-    // unavailable; load the two limbs and assemble them.
+    // Without a machine type for i128, as with the matching store the generic
+    // expansion is unavailable; load the two limbs and assemble them. With one
+    // the action is Expand instead and this is unreachable.
     if (VT == MVT::i256 && Load->getExtensionType() != ISD::NON_EXTLOAD &&
         Load->getMemoryVT() == MVT::i128) {
       SDLoc DL(Op);
@@ -8746,7 +8784,8 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     SDValue StoredVal = Store->getValue();
     EVT VT = StoredVal.getValueType();
     // The generic truncating-store expansion truncates to the memory type
-    // first, and i128 is not legal. Store the two low limbs instead.
+    // first, which needs a machine type for i128. Without one, store the two
+    // low limbs instead; with one the action is Expand and this is unreachable.
     if (VT == MVT::i256 && Store->isTruncatingStore() &&
         Store->getMemoryVT() == MVT::i128) {
       SDLoc DL(Op);
@@ -8969,7 +9008,7 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
   case ISD::VSELECT:
     return lowerToScalableOp(Op, DAG);
   case ISD::CTPOP:
-    if (Op.getValueType() == MVT::i256)
+    if (isReviveWideVT(Op.getValueType()))
       return lowerWideBitCount(Op, DAG, Subtarget);
     return lowerToScalableOp(Op, DAG);
   case ISD::SHL:
@@ -9046,7 +9085,7 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
   case ISD::CTLZ_ZERO_UNDEF:
   case ISD::CTTZ:
   case ISD::CTTZ_ZERO_UNDEF:
-    if (Op.getValueType() == MVT::i256)
+    if (isReviveWideVT(Op.getValueType()))
       return lowerWideBitCount(Op, DAG, Subtarget);
     if (Subtarget.hasStdExtZvbb())
       return lowerToScalableOp(Op, DAG);
@@ -9974,7 +10013,7 @@ SDValue RISCVTargetLowering::lowerSELECT(SDValue Op, SelectionDAG &DAG) const {
 
   // The rewrites below fold operands into XLen arithmetic, Zicond or bit
   // tricks, all assuming a GPR. Go straight to the conditional-branch pseudo.
-  if (VT == MVT::i256) {
+  if (isReviveWideVT(VT)) {
     SDValue Ops[] = {CondV, DAG.getConstant(0, DL, XLenVT),
                      DAG.getCondCode(ISD::SETNE), TrueV, FalseV};
     return DAG.getNode(RISCVISD::SELECT_CC, DL, VT, Ops);
@@ -23724,6 +23763,7 @@ RISCVTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RISCV::Select_FPR64_Using_CC_GPR:
   case RISCV::Select_FPR64INX_Using_CC_GPR:
   case RISCV::Select_VRM2_Using_CC_GPR:
+  case RISCV::Select_VR_Using_CC_GPR:
   case RISCV::Select_FPR64IN32X_Using_CC_GPR:
     return emitSelectPseudo(MI, BB, Subtarget);
   case RISCV::BuildPairF64Pseudo:
