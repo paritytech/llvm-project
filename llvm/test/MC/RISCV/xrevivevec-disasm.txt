@@ -1,7 +1,7 @@
 # RUN: llvm-mc -triple=riscv64 -mattr=+xrevivevec -disassemble %s \
 # RUN:     | FileCheck %s
 # RUN: llvm-mc -triple=riscv64 -mattr=+xrevivevec -disassemble %s 2>&1 \
-# RUN:     | FileCheck -check-prefix=CHECK-ODD %s
+# RUN:     | FileCheck -check-prefix=CHECK-INVALID %s
 # RUN: llvm-mc -triple=riscv64 -disassemble %s 2>&1 \
 # RUN:     | FileCheck -check-prefix=CHECK-NO-EXT %s
 
@@ -102,12 +102,113 @@
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x74,0x05,0x02
 
-# The low bit of a wide memory offset is reserved for selecting the width, so a
-# word that sets it decodes as nothing, extension or no extension. These two are
-# the loads and stores above with 1 added to the offset field.
-# CHECK-ODD: invalid instruction encoding
+# The 128-bit width: the same operations with the top funct7 bit set, on single
+# registers rather than pairs, so an odd register decodes here where a 256-bit
+# instruction has no encoding for one.
+# CHECK: revive.wadd.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x80
+# CHECK: revive.wsub.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x82
+# CHECK: revive.wmul.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x84
+# CHECK: revive.wand.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x86
+# CHECK: revive.wor.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x88
+# CHECK: revive.wxor.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x8a
+# CHECK: revive.wdivu.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x8c
+# CHECK: revive.wdiv.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x8e
+# CHECK: revive.wremu.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x90
+# CHECK: revive.wrem.i128	v8, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x92
+# CHECK: revive.wadd.i128	v9, v11, v13
+# CHECK-NO-EXT: invalid instruction encoding
+0xdb,0x84,0xd5,0x80
+# CHECK: revive.wxor.i128	v31, v31, v1
+# CHECK-NO-EXT: invalid instruction encoding
+0xdb,0x8f,0x1f,0x8a
+# CHECK: revive.wsll.i128	v8, v8, a0
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x24,0xa4,0x80
+# CHECK: revive.wsrl.i128	v8, v8, a0
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x24,0xa4,0x82
+# CHECK: revive.wsra.i128	v8, v8, a0
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x24,0xa4,0x84
+# CHECK: revive.wseq.i128	a0, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x15,0xa4,0x80
+# CHECK: revive.wsne.i128	a0, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x15,0xa4,0x82
+# CHECK: revive.wsltu.i128	a0, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x15,0xa4,0x84
+# CHECK: revive.wslt.i128	a0, v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x15,0xa4,0x86
+# CHECK: revive.wmv.i128	v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x64,0x05,0x80
+# CHECK: revive.wbswap.i128	v8, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x64,0x05,0x84
+# CHECK: revive.wtrunc.i128	a0, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x65,0x05,0x82
+# CHECK: revive.wcpop.i128	a0, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x65,0x05,0x86
+# CHECK: revive.wclz.i128	a0, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x65,0x05,0x88
+# CHECK: revive.wctz.i128	a0, v10
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x65,0x05,0x8a
+# CHECK: revive.wzext.i128	v8, a0
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x74,0x05,0x80
+# CHECK: revive.wsext.i128	v8, a0
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x74,0x05,0x82
+# The low bit of the offset field is the width rather than part of the offset.
+# CHECK: revive.wld.i128	v8, 0(a0)
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x44,0x15,0x00
+# CHECK: revive.wst.i128	v8, 0(a0)
+# CHECK-NO-EXT: invalid instruction encoding
+0xdb,0x50,0x85,0x00
+# Which leaves the offset itself where it was: these two words are the 256-bit
+# load and store at offset 16 with the width bit set, and they are the 128-bit
+# forms at that same offset rather than nothing at all.
+# CHECK: revive.wld.i128	v8, 16(a0)
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x44,0x15,0x01
-# CHECK-ODD: invalid instruction encoding
+# CHECK: revive.wst.i128	v8, 16(a0)
 # CHECK-NO-EXT: invalid instruction encoding
 0xdb,0x58,0x85,0x00
+
+# The 256-bit-only operations have no 128-bit twin, so their encodings with the
+# width bit set decode as nothing, extension or no extension. These two are the
+# exponentiation and sign-extension words above with that bit added.
+# CHECK-INVALID: invalid instruction encoding
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x94
+# CHECK-INVALID: invalid instruction encoding
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x04,0xa4,0x96

@@ -16,7 +16,10 @@
 // for them: copies are `vmv2r.v` and a wide value can be built by ordinary
 // vector code. The semantics of the instructions below are scalar, though:
 // nothing here reads `vtype` or `vl`, and the width is fixed by the opcode
-// rather than by a `vsetvli`.
+// rather than by a `vsetvli`. Two widths are encoded here, 256 bits in a
+// register pair and 128 bits in a single register, and every instruction
+// carries its own: a `funct7` bit in the register forms, the low bit of the
+// offset field in the memory forms.
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,6 +41,19 @@ def simm12_lsb0 : RISCVOp,
   let ParserMatchClass = SImmAsmOperand<12, "Lsb0">;
   let EncoderMethod = "getImmOpValue";
   let DecoderMethod = "decodeSImmLsb0Operand<12>";
+  let OperandType = "OPERAND_SIMM12_LSB0";
+}
+
+// The same offset, for a width whose flag takes the low bit of the field rather
+// than leaving the offset's own zero there. The offset occupies the eleven bits
+// above the flag, which is where the wider type keeps it too, so what reaches
+// the decoder is the offset already in place, and even by construction rather
+// than by a check.
+def simm12_lsb0_widthflag
+    : RISCVOp, ImmLeaf<XLenVT, [{return isShiftedInt<11, 1>(Imm);}]> {
+  let ParserMatchClass = SImmAsmOperand<12, "Lsb0">;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeSImmOperand<12>";
   let OperandType = "OPERAND_SIMM12_LSB0";
 }
 
@@ -113,13 +129,37 @@ class RVReviveR4<bits<2> funct2, string opcodestr>
                (ins VRM2:$rs1, VRM2:$rs2, VRM2:$rs3), opcodestr,
                "$rd, $rs1, $rs2, $rs3">;
 
+// The memory forms have no funct7 to put the width in, so the low bit of the
+// offset field holds it: the offset is even, so the widest type leaves its own
+// zero there and a narrower one a fixed one. The offset itself stays in the
+// same eleven bits at either width, and the flag being a fixed bit is what
+// makes the widths separate encodings rather than one the decoder must guess.
+class RVReviveLoad<bit width, DAGOperand valty, DAGOperand memimm,
+                   string opcodestr>
+    : RVInstI<0b100, OPC_CUSTOM_2, (outs valty:$rd),
+              (ins GPRMem:$rs1, memimm:$imm12), opcodestr,
+              "$rd, ${imm12}(${rs1})"> {
+  let Inst{31-21} = imm12{11-1};
+  let Inst{20} = !if(width, 0b1, imm12{0});
+}
+
+class RVReviveStore<bit width, DAGOperand valty, DAGOperand memimm,
+                    string opcodestr>
+    : RVInstS<0b101, OPC_CUSTOM_2, (outs),
+              (ins valty:$rs2, GPRMem:$rs1, memimm:$imm12), opcodestr,
+              "$rs2, ${imm12}(${rs1})"> {
+  let Inst{11-8} = imm12{4-1};
+  let Inst{7} = !if(width, 0b1, imm12{0});
+}
+
 //===----------------------------------------------------------------------===//
 // Instructions
 //===----------------------------------------------------------------------===//
 
-// One expansion per wide type: `width` is the funct7 bit that selects it,
-// `valty` the registers that hold it, `suffix` and `asmsuffix` the tails of the
-// record names and of the mnemonics, `memimm` the offset the memory forms take.
+// One expansion per wide type: `width` is the bit that selects it, of funct7 in
+// the register forms and of the offset field in the memory forms, `valty` the
+// registers that hold it, `suffix` and `asmsuffix` the tails of the record
+// names and of the mnemonics, `memimm` the offset the memory forms take.
 multiclass RVReviveOps<bit width, DAGOperand valty, string suffix,
                        string asmsuffix, DAGOperand memimm> {
 let Predicates = [HasVendorXReviveVec] in {
@@ -169,18 +209,15 @@ def SEXT#suffix  : RVReviveCvtToWide<width, 0b000001, valty,
 
 // Memory
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-def LD#suffix : RVInstI<0b100, OPC_CUSTOM_2, (outs valty:$rd),
-                        (ins GPRMem:$rs1, memimm:$imm12),
-                        "revive.wld"#asmsuffix, "$rd, ${imm12}(${rs1})">;
+def LD#suffix : RVReviveLoad<width, valty, memimm, "revive.wld"#asmsuffix>;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-def ST#suffix : RVInstS<0b101, OPC_CUSTOM_2, (outs),
-                        (ins valty:$rs2, GPRMem:$rs1, memimm:$imm12),
-                        "revive.wst"#asmsuffix, "$rs2, ${imm12}(${rs1})">;
+def ST#suffix : RVReviveStore<width, valty, memimm, "revive.wst"#asmsuffix>;
 } // Predicates = [HasVendorXReviveVec]
 }
 
 defm REVIVE_W_ : RVReviveOps<0, VRM2, "", "", simm12_lsb0>;
+defm REVIVE_W_ : RVReviveOps<1, VR, "_128", ".i128", simm12_lsb0_widthflag>;
 
 //===----------------------------------------------------------------------===//
 // Routines that revive currently open-codes in stdlib.ll
