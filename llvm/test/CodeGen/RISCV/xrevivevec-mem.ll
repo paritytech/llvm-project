@@ -90,6 +90,21 @@ define i256 @sextload_i32(ptr %p) {
   ret i256 %r
 }
 
+; A whole XLen word has no sign-extending load fragment, so legalization splits
+; the sextload into an any-extending one and a sign_extend_inreg of the value.
+define i256 @sextload_i64(ptr %p) {
+; CHECK-LABEL: sextload_i64:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld a0, 0(a0)
+; CHECK-NEXT:    revive.wzext v8, a0
+; CHECK-NEXT:    revive.wtrunc a0, v8
+; CHECK-NEXT:    revive.wsext v8, a0
+; CHECK-NEXT:    ret
+  %v = load i64, ptr %p
+  %r = sext i64 %v to i256
+  ret i256 %r
+}
+
 define void @truncstore_i8(ptr %p, i256 %v) {
 ; CHECK-LABEL: truncstore_i8:
 ; CHECK:       # %bb.0:

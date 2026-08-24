@@ -510,15 +510,18 @@ define void @sextload_i32(ptr %p, ptr %r) {
   ret void
 }
 
-; An i64 sign-extended into a wide value, which comes from a register here: a
-; sign-extending load of a whole XLen word is a hole the extension has at both
-; widths, since sextloadi64 has no pattern fragment to match.
-define void @sext_i64(i64 %v, ptr %r) {
-; CHECK-LABEL: sext_i64:
+; A whole XLen word has no sign-extending load fragment, so legalization splits
+; the sextload into an any-extending one and a sign_extend_inreg of the value.
+define void @sextload_i64(ptr %p, ptr %r) {
+; CHECK-LABEL: sextload_i64:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld a0, 0(a0)
+; CHECK-NEXT:    revive.wzext.i128 v8, a0
+; CHECK-NEXT:    revive.wtrunc.i128 a0, v8
 ; CHECK-NEXT:    revive.wsext.i128 v8, a0
 ; CHECK-NEXT:    revive.wst.i128 v8, 0(a1)
 ; CHECK-NEXT:    ret
+  %v = load i64, ptr %p
   %z = sext i64 %v to i128
   store i128 %z, ptr %r
   ret void
@@ -813,8 +816,7 @@ define void @select_wide_cond(ptr %p, ptr %q, ptr %r) {
 ; Sign-extending into the wider type while the narrow value stays live: the
 ; pair's low half and the value itself have to end up in the same register,
 ; since a copy would need the whole register vector move this configuration
-; cannot encode. Only the wider configuration has this shape at all, so it lives
-; here rather than beside the other conversions.
+; cannot encode.
 define void @sext_i128_still_live(ptr %p, ptr %q, ptr %r) {
 ; CHECK-LABEL: sext_i128_still_live:
 ; CHECK:       # %bb.0:

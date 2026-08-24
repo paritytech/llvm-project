@@ -357,8 +357,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
 
       // A wide immediate has no encoding, so constants are materialised from
       // the constant pool; selects need control flow, as they do for XLenVT.
-      setOperationAction({ISD::Constant, ISD::SELECT, ISD::SIGN_EXTEND_INREG},
-                         WideVT, Custom);
+      setOperationAction({ISD::Constant, ISD::SELECT}, WideVT, Custom);
 
       // Expand the rest explicitly, so an unhandled node cannot reach ISel.
       setOperationAction({ISD::SELECT_CC, ISD::BR_CC, ISD::BITREVERSE,
@@ -7997,20 +7996,6 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     return lowerConstantFP(Op, DAG);
   case ISD::SELECT:
     return lowerSELECT(Op, DAG);
-  case ISD::SIGN_EXTEND_INREG: {
-    // Sign-extending a narrow field of a wide value. Do it in an XLen register,
-    // where the target already has the instructions, and widen the result.
-    EVT ExtVT = cast<VTSDNode>(Op.getOperand(1))->getVT();
-    assert(isReviveWideVT(Op.getValueType()) &&
-           ExtVT.getSizeInBits() <= Subtarget.getXLen() &&
-           "Unexpected sign_extend_inreg");
-    SDLoc DL(Op);
-    MVT XLenVT = Subtarget.getXLenVT();
-    SDValue Narrow = DAG.getNode(ISD::TRUNCATE, DL, XLenVT, Op.getOperand(0));
-    SDValue Signed = DAG.getNode(ISD::SIGN_EXTEND_INREG, DL, XLenVT, Narrow,
-                                 Op.getOperand(1));
-    return DAG.getNode(RISCVISD::WIDE_SEXT, DL, Op.getValueType(), Signed);
-  }
   case ISD::BRCOND:
     return lowerBRCOND(Op, DAG);
   case ISD::VASTART:

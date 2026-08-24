@@ -92,6 +92,78 @@ define void @sext_i128_to_i256(ptr %p, ptr %r) {
   ret void
 }
 
+; The narrow value stays live past the extension, so neither configuration can
+; fold the extension into the load: with the type legal the sign fills the pair's
+; high half, and without it the promoted value is sign-extended in place by the
+; shift pair.
+define void @sext_i128_still_live(ptr %p, ptr %q, ptr %r) {
+; I128-LABEL: sext_i128_still_live:
+; I128:       # %bb.0:
+; I128-NEXT:    revive.wld.i128 v8, 0(a0)
+; I128-NEXT:    li a0, 127
+; I128-NEXT:    revive.wsra.i128 v9, v8, a0
+; I128-NEXT:    revive.wst v8, 0(a1)
+; I128-NEXT:    revive.wst.i128 v8, 0(a2)
+; I128-NEXT:    ret
+;
+; NOI128-LABEL: sext_i128_still_live:
+; NOI128:       # %bb.0:
+; NOI128-NEXT:    ld a3, 8(a0)
+; NOI128-NEXT:    ld a0, 0(a0)
+; NOI128-NEXT:    li a4, 64
+; NOI128-NEXT:    revive.wzext v8, a3
+; NOI128-NEXT:    revive.wsll v8, v8, a4
+; NOI128-NEXT:    li a4, 128
+; NOI128-NEXT:    revive.wzext v10, a0
+; NOI128-NEXT:    revive.wor v8, v10, v8
+; NOI128-NEXT:    revive.wsll v8, v8, a4
+; NOI128-NEXT:    revive.wsra v8, v8, a4
+; NOI128-NEXT:    revive.wst v8, 0(a1)
+; NOI128-NEXT:    sd a0, 0(a2)
+; NOI128-NEXT:    sd a3, 8(a2)
+; NOI128-NEXT:    ret
+  %v = load i128, ptr %p
+  %s = sext i128 %v to i256
+  store i256 %s, ptr %q
+  store i128 %v, ptr %r
+  ret void
+}
+
+; A shift pair on a computed value, which the combiner folds into a
+; sign_extend_inreg of the low 128 bits and selection turns back into the same
+; pair. The field is 128 bits whether or not that width is a type of its own, so
+; both settings select it the same way.
+define void @sext_inreg_i128(ptr %p, ptr %q, ptr %r) {
+; I128-LABEL: sext_inreg_i128:
+; I128:       # %bb.0:
+; I128-NEXT:    revive.wld v8, 0(a0)
+; I128-NEXT:    revive.wld v10, 0(a1)
+; I128-NEXT:    revive.wadd v8, v8, v10
+; I128-NEXT:    li a0, 128
+; I128-NEXT:    revive.wsll v8, v8, a0
+; I128-NEXT:    revive.wsra v8, v8, a0
+; I128-NEXT:    revive.wst v8, 0(a2)
+; I128-NEXT:    ret
+;
+; NOI128-LABEL: sext_inreg_i128:
+; NOI128:       # %bb.0:
+; NOI128-NEXT:    revive.wld v8, 0(a0)
+; NOI128-NEXT:    revive.wld v10, 0(a1)
+; NOI128-NEXT:    revive.wadd v8, v8, v10
+; NOI128-NEXT:    li a0, 128
+; NOI128-NEXT:    revive.wsll v8, v8, a0
+; NOI128-NEXT:    revive.wsra v8, v8, a0
+; NOI128-NEXT:    revive.wst v8, 0(a2)
+; NOI128-NEXT:    ret
+  %a = load i256, ptr %p
+  %b = load i256, ptr %q
+  %c = add i256 %a, %b
+  %s = shl i256 %c, 128
+  %t = ashr i256 %s, 128
+  store i256 %t, ptr %r
+  ret void
+}
+
 ; Promoting an i100 forms an any_extend to the wider type, with the mask that
 ; makes the extension a zero one applied afterwards.
 define void @anyext_i100_to_i256(ptr %p, ptr %r) {

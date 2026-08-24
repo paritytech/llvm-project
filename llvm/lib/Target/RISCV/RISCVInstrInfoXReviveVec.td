@@ -321,8 +321,11 @@ def : Pat<(XLenVT (setcc (vt valty:$rs1), (vt valty:$rs2), SETGT)),
 
 def : Pat<(vt (bswap (vt valty:$rs1))), (W_BSWAP (vt valty:$rs1))>;
 
-// sign_extend_inreg is formed after legalization, so the Custom lowering does not
-// always see it. Narrow to a GPR, sign-extend there, and widen back.
+// sign_extend_inreg is formed after legalization, so it reaches selection rather
+// than a lowering hook. Narrow to a GPR, sign-extend there, and widen back; a
+// field as wide as the GPR needs no sign extension in it, only the round trip.
+def : Pat<(vt (sext_inreg (vt valty:$rs1), i64)),
+          (W_SEXT (W_TRUNC (vt valty:$rs1)))>;
 def : Pat<(vt (sext_inreg (vt valty:$rs1), i32)),
           (W_SEXT (ADDIW (W_TRUNC (vt valty:$rs1)), 0))>;
 def : Pat<(vt (sext_inreg (vt valty:$rs1), i16)),
@@ -396,6 +399,14 @@ def : Pat<(i256 (sext (i128 VR:$src))),
                               (i128 (REVIVE_W_SRA_128 (i128 VR:$src),
                                                       (ADDI (XLenVT X0), 127))),
                               sub_vrm1_1)>;
+// Sign-extending the low half in place, which promoting an illegal i128 forms
+// after legalization; a combine can form it with the type legal too, and the
+// shift pair is what the node means at either setting: up to the top of the pair
+// and back down with the sign.
+def : Pat<(i256 (sext_inreg (i256 VRM2:$src), i128)),
+          (REVIVE_W_SRA (REVIVE_W_SLL (i256 VRM2:$src),
+                                      (ADDI (XLenVT X0), 128)),
+                        (ADDI (XLenVT X0), 128))>;
 
 // The stdlib replacements. These are reached through intrinsics rather than
 // ordinary IR because they have no LLVM opcode.
