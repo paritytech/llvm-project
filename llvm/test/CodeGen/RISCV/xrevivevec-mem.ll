@@ -144,6 +144,22 @@ define i256 @extload_i128(ptr %p) {
   ret i256 %r
 }
 
+define i256 @sextload_i128(ptr %p) {
+; CHECK-LABEL: sextload_i128:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld a1, 8(a0)
+; CHECK-NEXT:    ld a0, 0(a0)
+; CHECK-NEXT:    revive.wsext v8, a1
+; CHECK-NEXT:    li a1, 64
+; CHECK-NEXT:    revive.wsll v8, v8, a1
+; CHECK-NEXT:    revive.wzext v10, a0
+; CHECK-NEXT:    revive.wor v8, v10, v8
+; CHECK-NEXT:    ret
+  %v = load i128, ptr %p
+  %r = sext i128 %v to i256
+  ret i256 %r
+}
+
 define i64 @trunc_to_i64(i256 %a) {
 ; CHECK-LABEL: trunc_to_i64:
 ; CHECK:       # %bb.0:

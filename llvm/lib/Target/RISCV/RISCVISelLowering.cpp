@@ -8657,11 +8657,16 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
           XLenVT, DL, Load->getChain(), HighPtr,
           Load->getPointerInfo().getWithOffset(8), Load->getBaseAlign(),
           Load->getMemOperand()->getFlags());
-      // Zero-extending regardless of kind: revive only produces that form here.
+      // The high limb's extend follows the load kind, so a SEXTLOAD fills bits
+      // 128..255 with the sign. The low limb's bits above 63 are overwritten by
+      // the OR, so zero-extending it always suffices.
+      unsigned HighExtend = Load->getExtensionType() == ISD::SEXTLOAD
+                                ? ISD::SIGN_EXTEND
+                                : ISD::ZERO_EXTEND;
       SDValue Wide = DAG.getNode(
           ISD::OR, DL, MVT::i256, DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i256, Low),
           DAG.getNode(ISD::SHL, DL, MVT::i256,
-                      DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i256, High),
+                      DAG.getNode(HighExtend, DL, MVT::i256, High),
                       DAG.getConstant(64, DL, XLenVT)));
       SDValue Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other,
                                   Low.getValue(1), High.getValue(1));
