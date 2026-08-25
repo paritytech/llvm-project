@@ -1578,15 +1578,28 @@ void RISCVFrameLowering::determineCalleeSaves(MachineFunction &MF,
   const MachineRegisterInfo &MRI = MF.getRegInfo();
   const MCPhysReg *CSRegs = MRI.getCalleeSavedRegs();
   const RISCVRegisterInfo &TRI = *STI.getRegisterInfo();
+  BitVector CalleeSavedEntries(TRI.getNumRegs());
+  for (unsigned i = 0; CSRegs[i]; ++i)
+    CalleeSavedEntries.set(CSRegs[i]);
   for (unsigned i = 0; CSRegs[i]; ++i) {
     unsigned CSReg = CSRegs[i];
     // Only vector registers need special care.
     if (!RISCV::VRRegClass.contains(getRVVBaseRegister(TRI, CSReg)))
       continue;
 
+    auto SubRegs = TRI.subregs(CSReg);
+    // Narrowing a group down to the subregisters that were clobbered preserves
+    // them only where each is callee saved in its own right, so that the prologue
+    // can save it alone. XReviveVec's convention names the register pairs and not
+    // the registers they are made of, because a wide value occupies the pair, and
+    // there a clobbered half has to be saved as the whole pair.
+    if (!llvm::all_of(SubRegs, [&](unsigned Reg) {
+          return CalleeSavedEntries.test(Reg);
+        }))
+      continue;
+
     SavedRegs.reset(CSReg);
 
-    auto SubRegs = TRI.subregs(CSReg);
     // Set the register and all its subregisters.
     if (!MRI.def_empty(CSReg) || MRI.getUsedPhysRegsMask().test(CSReg)) {
       SavedRegs.set(CSReg);
