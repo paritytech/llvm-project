@@ -87,14 +87,21 @@
 # CHECK: revive.wst	v8, 0(a0)
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x50,0x85,0x00
-# The offset is the plain immediate field, not a shifted one: 16 is encoded as
-# 16 even though the low bit of the field can never be set.
+# The offset is the plain immediate field, not a shifted one: 16 encodes as 16.
 # CHECK: revive.wld	v8, 16(a0)
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x44,0x05,0x01
 # CHECK: revive.wst	v8, 16(a0)
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x58,0x85,0x00
+# And it is byte-granular, so these are the same two at 17: the offset's low bit
+# sits in bit 20 of the load and bit 7 of the store.
+# CHECK: revive.wld	v8, 17(a0)
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x44,0x15,0x01
+# CHECK: revive.wst	v8, 17(a0)
+# CHECK-NO-EXT: invalid instruction encoding
+0xdb,0x58,0x85,0x00
 # CHECK: revive.wzext	v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0x05,0x24
@@ -186,22 +193,29 @@
 # CHECK: revive.wsext.i128	v8, a0
 # CHECK-NO-EXT: invalid instruction encoding
 0x5b,0x04,0x05,0xa6
-# The low bit of the offset field is the width rather than part of the offset.
+# The memory forms are the one place the width is not a funct7 bit: it is the
+# middle bit of funct3, so these are the 256-bit load and store above with 0b110
+# and 0b111 there instead of 0b100 and 0b101.
 # CHECK: revive.wld.i128	v8, 0(a0)
 # CHECK-NO-EXT: invalid instruction encoding
-0x5b,0x44,0x15,0x00
+0x5b,0x64,0x05,0x00
 # CHECK: revive.wst.i128	v8, 0(a0)
 # CHECK-NO-EXT: invalid instruction encoding
-0xdb,0x50,0x85,0x00
-# Which leaves the offset itself where it was: these two words are the 256-bit
-# load and store at offset 16 with the width bit set, and they are the 128-bit
-# forms at that same offset rather than nothing at all.
+0x5b,0x70,0x85,0x00
+# The offset is the same twelve bits meaning the same thing, byte-granular here
+# too: 16 and then 17.
 # CHECK: revive.wld.i128	v8, 16(a0)
 # CHECK-NO-EXT: invalid instruction encoding
-0x5b,0x44,0x15,0x01
+0x5b,0x64,0x05,0x01
 # CHECK: revive.wst.i128	v8, 16(a0)
 # CHECK-NO-EXT: invalid instruction encoding
-0xdb,0x58,0x85,0x00
+0x5b,0x78,0x85,0x00
+# CHECK: revive.wld.i128	v8, 17(a0)
+# CHECK-NO-EXT: invalid instruction encoding
+0x5b,0x64,0x15,0x01
+# CHECK: revive.wst.i128	v8, 17(a0)
+# CHECK-NO-EXT: invalid instruction encoding
+0xdb,0x78,0x85,0x00
 
 # The 256-bit-only operations have no 128-bit twin, so their encodings with the
 # width bit set decode as nothing, extension or no extension. These two are the

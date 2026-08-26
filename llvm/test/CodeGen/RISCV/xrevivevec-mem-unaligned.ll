@@ -2,16 +2,15 @@
 ; RUN: llc -mtriple=riscv64 -mattr=+m,+xrevivevec,+unaligned-scalar-mem -verify-machineinstrs < %s \
 ; RUN:   | FileCheck %s
 
-; The offset of a wide access is even, so an odd one is added to the address
-; instead. Only a byte-aligned access can reach an odd address, and it only
-; stays a single wide access where unaligned scalar memory is allowed, so this
-; is the one configuration where the distinction shows.
+; The offset of a wide access is byte-granular, so an odd one folds like any
+; other. Only a byte-aligned access can reach an odd address, and it only stays
+; a single wide access where unaligned scalar memory is allowed, so this is the
+; one configuration where an odd offset arises at all.
 
 define i256 @load_odd_offset(ptr %p) {
 ; CHECK-LABEL: load_odd_offset:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi a0, a0, 17
-; CHECK-NEXT:    revive.wld v8, 0(a0)
+; CHECK-NEXT:    revive.wld v8, 17(a0)
 ; CHECK-NEXT:    ret
   %q = getelementptr i8, ptr %p, i64 17
   %v = load i256, ptr %q, align 1
@@ -21,8 +20,7 @@ define i256 @load_odd_offset(ptr %p) {
 define void @store_odd_offset(ptr %p, i256 %v) {
 ; CHECK-LABEL: store_odd_offset:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi a0, a0, -3
-; CHECK-NEXT:    revive.wst v8, 0(a0)
+; CHECK-NEXT:    revive.wst v8, -3(a0)
 ; CHECK-NEXT:    ret
   %q = getelementptr i8, ptr %p, i64 -3
   store i256 %v, ptr %q, align 1
@@ -49,10 +47,78 @@ define void @store_even_offset(ptr %p, i256 %v) {
   ret void
 }
 
+; The ends of the range. 2047 is the odd one of the two and needs the whole
+; field, so it is what shows the range is a byte count rather than half of one.
+define i256 @load_offset_max(ptr %p) {
+; CHECK-LABEL: load_offset_max:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    revive.wld v8, 2047(a0)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 2047
+  %v = load i256, ptr %q, align 1
+  ret i256 %v
+}
+
+define void @store_offset_max(ptr %p, i256 %v) {
+; CHECK-LABEL: store_offset_max:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    revive.wst v8, 2047(a0)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 2047
+  store i256 %v, ptr %q, align 1
+  ret void
+}
+
+define i256 @load_offset_min(ptr %p) {
+; CHECK-LABEL: load_offset_min:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    revive.wld v8, -2048(a0)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 -2048
+  %v = load i256, ptr %q, align 1
+  ret i256 %v
+}
+
+define void @store_offset_min(ptr %p, i256 %v) {
+; CHECK-LABEL: store_offset_min:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    revive.wst v8, -2048(a0)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 -2048
+  store i256 %v, ptr %q, align 1
+  ret void
+}
+
+; One past either end, which goes into the address whole rather than being split
+; across the instruction.
+define i256 @load_offset_past_max(ptr %p) {
+; CHECK-LABEL: load_offset_past_max:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    addi a0, a0, 2047
+; CHECK-NEXT:    addi a0, a0, 1
+; CHECK-NEXT:    revive.wld v8, 0(a0)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 2048
+  %v = load i256, ptr %q, align 1
+  ret i256 %v
+}
+
+define void @store_offset_past_min(ptr %p, i256 %v) {
+; CHECK-LABEL: store_offset_past_min:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    addi a0, a0, -2048
+; CHECK-NEXT:    addi a0, a0, -1
+; CHECK-NEXT:    revive.wst v8, 0(a0)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 -2049
+  store i256 %v, ptr %q, align 1
+  ret void
+}
+
 declare void @escape(ptr)
 
 ; A byte-aligned stack object can land at an odd offset from the stack pointer,
-; which the frame index elimination has to add rather than fold.
+; which the frame index elimination folds like any other.
 define i256 @load_odd_stack_offset() {
 ; CHECK-LABEL: load_odd_stack_offset:
 ; CHECK:       # %bb.0:
@@ -62,8 +128,7 @@ define i256 @load_odd_stack_offset() {
 ; CHECK-NEXT:    .cfi_offset ra, -8
 ; CHECK-NEXT:    addi a0, sp, 37
 ; CHECK-NEXT:    call escape
-; CHECK-NEXT:    addi a0, sp, 5
-; CHECK-NEXT:    revive.wld v8, 0(a0)
+; CHECK-NEXT:    revive.wld v8, 5(sp)
 ; CHECK-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
 ; CHECK-NEXT:    addi sp, sp, 48

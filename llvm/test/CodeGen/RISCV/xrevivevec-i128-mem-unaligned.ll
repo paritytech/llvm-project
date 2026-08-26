@@ -2,16 +2,15 @@
 ; RUN: llc -mtriple=riscv64 -mattr=+m,+xrevivevec,+unaligned-scalar-mem \
 ; RUN:   -riscv-revive-i128 -verify-machineinstrs < %s | FileCheck %s
 
-; The offset of a wide access is even at either width, so an odd one is added to
-; the address instead. Only a byte-aligned access can reach an odd address, and
+; The offset of a wide access is byte-granular at either width, so an odd one
+; folds like any other. Only a byte-aligned access can reach an odd address, and
 ; it only stays a single wide access where unaligned scalar memory is allowed, so
-; this is the one configuration where the distinction shows.
+; this is the one configuration where an odd offset arises at all.
 
 define void @load_odd_offset(ptr %p, ptr %r) {
 ; CHECK-LABEL: load_odd_offset:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi a0, a0, 17
-; CHECK-NEXT:    revive.wld.i128 v8, 0(a0)
+; CHECK-NEXT:    revive.wld.i128 v8, 17(a0)
 ; CHECK-NEXT:    revive.wst.i128 v8, 0(a1)
 ; CHECK-NEXT:    ret
   %q = getelementptr i8, ptr %p, i64 17
@@ -24,8 +23,7 @@ define void @store_odd_offset(ptr %p, ptr %r) {
 ; CHECK-LABEL: store_odd_offset:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    revive.wld.i128 v8, 0(a0)
-; CHECK-NEXT:    addi a1, a1, -3
-; CHECK-NEXT:    revive.wst.i128 v8, 0(a1)
+; CHECK-NEXT:    revive.wst.i128 v8, -3(a1)
 ; CHECK-NEXT:    ret
   %v = load i128, ptr %p, align 1
   %q = getelementptr i8, ptr %r, i64 -3
@@ -46,12 +44,56 @@ define void @load_store_even_offset(ptr %p, ptr %r) {
   ret void
 }
 
+; The ends of the range, the same twelve bits' worth as at 256. 2047 is the odd
+; one of the two and needs the whole field.
+define void @load_store_offset_max(ptr %p, ptr %r) {
+; CHECK-LABEL: load_store_offset_max:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    revive.wld.i128 v8, 2047(a0)
+; CHECK-NEXT:    revive.wst.i128 v8, 2047(a1)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 2047
+  %v = load i128, ptr %q, align 1
+  %s = getelementptr i8, ptr %r, i64 2047
+  store i128 %v, ptr %s, align 1
+  ret void
+}
+
+define void @load_store_offset_min(ptr %p, ptr %r) {
+; CHECK-LABEL: load_store_offset_min:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    revive.wld.i128 v8, -2048(a0)
+; CHECK-NEXT:    revive.wst.i128 v8, -2048(a1)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 -2048
+  %v = load i128, ptr %q, align 1
+  %s = getelementptr i8, ptr %r, i64 -2048
+  store i128 %v, ptr %s, align 1
+  ret void
+}
+
+; One past the end, which goes into the address whole rather than being split
+; across the instruction.
+define void @load_offset_past_max(ptr %p, ptr %r) {
+; CHECK-LABEL: load_offset_past_max:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    addi a0, a0, 2047
+; CHECK-NEXT:    addi a0, a0, 1
+; CHECK-NEXT:    revive.wld.i128 v8, 0(a0)
+; CHECK-NEXT:    revive.wst.i128 v8, 0(a1)
+; CHECK-NEXT:    ret
+  %q = getelementptr i8, ptr %p, i64 2048
+  %v = load i128, ptr %q, align 1
+  store i128 %v, ptr %r, align 1
+  ret void
+}
+
 declare void @escape(ptr)
 
 ; A byte-aligned stack object can land at an odd offset from the stack pointer,
-; which the frame index elimination has to add rather than fold. It is the offset
-; that has to be even at this width too: the low bit of the field is the width
-; flag rather than part of the offset, so an odd one would not survive encoding.
+; which the frame index elimination folds like any other. The offset means the
+; same thing at this width: the width lives in funct3, so no bit of the field is
+; reserved for it.
 define void @load_odd_stack_offset(ptr %r) {
 ; CHECK-LABEL: load_odd_stack_offset:
 ; CHECK:       # %bb.0:
@@ -64,8 +106,7 @@ define void @load_odd_stack_offset(ptr %r) {
 ; CHECK-NEXT:    mv s0, a0
 ; CHECK-NEXT:    addi a0, sp, 29
 ; CHECK-NEXT:    call escape
-; CHECK-NEXT:    addi a0, sp, 13
-; CHECK-NEXT:    revive.wld.i128 v8, 0(a0)
+; CHECK-NEXT:    revive.wld.i128 v8, 13(sp)
 ; CHECK-NEXT:    revive.wst.i128 v8, 0(s0)
 ; CHECK-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload

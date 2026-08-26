@@ -18,44 +18,10 @@
 // nothing here reads `vtype` or `vl`, and the width is fixed by the opcode
 // rather than by a `vsetvli`. Two widths are encoded here, 256 bits in a
 // register pair and 128 bits in a single register, and every instruction
-// carries its own: a `funct7` bit in the register forms, the low bit of the
-// offset field in the memory forms.
+// carries its own: a `funct7` bit in the register forms, a `funct3` of its own
+// in the memory forms.
 //
 //===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
-// Operands
-//===----------------------------------------------------------------------===//
-
-// The offset a wide memory instruction takes: a 12-bit signed immediate whose
-// least significant bit is zero.
-//
-// Constants only, where a scalar load or store also accepts the low part of a
-// symbol. The PolkaVM linker decodes these instructions whole and rejects a
-// relocation against one, so a symbol has to be added to the address register
-// instead. Even only, because the low bit of the field selects between the wide
-// types; it stays where it is encoded rather than being shifted out, so that the
-// narrower types find it in the same place.
-def simm12_lsb0 : RISCVOp,
-                  ImmLeaf<XLenVT, [{return isShiftedInt<11, 1>(Imm);}]> {
-  let ParserMatchClass = SImmAsmOperand<12, "Lsb0">;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeSImmLsb0Operand<12>";
-  let OperandType = "OPERAND_SIMM12_LSB0";
-}
-
-// The same offset, for a width whose flag takes the low bit of the field rather
-// than leaving the offset's own zero there. The offset occupies the eleven bits
-// above the flag, which is where the wider type keeps it too, so what reaches
-// the decoder is the offset already in place, and even by construction rather
-// than by a check.
-def simm12_lsb0_widthflag
-    : RISCVOp, ImmLeaf<XLenVT, [{return isShiftedInt<11, 1>(Imm);}]> {
-  let ParserMatchClass = SImmAsmOperand<12, "Lsb0">;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeSImmOperand<12>";
-  let OperandType = "OPERAND_SIMM12_LSB0";
-}
 
 //===----------------------------------------------------------------------===//
 // DAG nodes
@@ -87,7 +53,8 @@ def riscv_wide_ctz : RVSDNode<"WIDE_CTZ", SDT_ReviveCount>;
 // bit is the width, so one operation keeps one funct6 at every width it exists
 // at. funct3 has eight values where funct6 has sixty-four, so the conversions
 // take no funct3 of their own: they sit above the arithmetic in funct3 000, at
-// funct6 12 through 19.
+// funct6 12 through 19. The memory forms have no funct6 to hold their width, so
+// it goes in funct3 instead and each width takes a value of its own.
 class RVReviveALU<bit width, bits<6> funct6, DAGOperand valty, string opcodestr>
     : RVInstR<{width, funct6}, 0b000, OPC_CUSTOM_2, (outs valty:$rd),
               (ins valty:$rs1, valty:$rs2), opcodestr, "$rd, $rs1, $rs2">;
@@ -132,39 +99,29 @@ class RVReviveR4<bits<2> funct2, string opcodestr>
                (ins VRM2:$rs1, VRM2:$rs2, VRM2:$rs3), opcodestr,
                "$rd, $rs1, $rs2, $rs3">;
 
-// The memory forms have no funct7 to put the width in, so the low bit of the
-// offset field holds it: the offset is even, so the widest type leaves its own
-// zero there and a narrower one a fixed one. The offset itself stays in the
-// same eleven bits at either width, and the flag being a fixed bit is what
-// makes the widths separate encodings rather than one the decoder must guess.
-class RVReviveLoad<bit width, DAGOperand valty, DAGOperand memimm,
-                   string opcodestr>
-    : RVInstI<0b100, OPC_CUSTOM_2, (outs valty:$rd),
-              (ins GPRMem:$rs1, memimm:$imm12), opcodestr,
-              "$rd, ${imm12}(${rs1})"> {
-  let Inst{31-21} = imm12{11-1};
-  let Inst{20} = !if(width, 0b1, imm12{0});
-}
+// 100 and 101 are the 256-bit load and store, 110 and 111 the 128-bit ones.
+// Nothing is left to take from the immediate, so both widths take the offset
+// exactly where LD and SD take theirs: a byte-granular simm12.
+class RVReviveLoad<bits<3> funct3, DAGOperand valty, string opcodestr>
+    : RVInstI<funct3, OPC_CUSTOM_2, (outs valty:$rd),
+              (ins GPRMem:$rs1, simm12_lo:$imm12), opcodestr,
+              "$rd, ${imm12}(${rs1})">;
 
-class RVReviveStore<bit width, DAGOperand valty, DAGOperand memimm,
-                    string opcodestr>
-    : RVInstS<0b101, OPC_CUSTOM_2, (outs),
-              (ins valty:$rs2, GPRMem:$rs1, memimm:$imm12), opcodestr,
-              "$rs2, ${imm12}(${rs1})"> {
-  let Inst{11-8} = imm12{4-1};
-  let Inst{7} = !if(width, 0b1, imm12{0});
-}
+class RVReviveStore<bits<3> funct3, DAGOperand valty, string opcodestr>
+    : RVInstS<funct3, OPC_CUSTOM_2, (outs),
+              (ins valty:$rs2, GPRMem:$rs1, simm12_lo:$imm12), opcodestr,
+              "$rs2, ${imm12}(${rs1})">;
 
 //===----------------------------------------------------------------------===//
 // Instructions
 //===----------------------------------------------------------------------===//
 
 // One expansion per wide type: `width` is the bit that selects it, of funct7 in
-// the register forms and of the offset field in the memory forms, `valty` the
-// registers that hold it, `suffix` and `asmsuffix` the tails of the record
-// names and of the mnemonics, `memimm` the offset the memory forms take.
+// the register forms and of funct3 in the memory forms, `valty` the registers
+// that hold it, `suffix` and `asmsuffix` the tails of the record names and of
+// the mnemonics.
 multiclass RVReviveOps<bit width, DAGOperand valty, string suffix,
-                       string asmsuffix, DAGOperand memimm> {
+                       string asmsuffix> {
 let Predicates = [HasVendorXReviveVec] in {
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in {
 // Arithmetic and logic
@@ -212,15 +169,17 @@ def SEXT#suffix  : RVReviveCvtToWide<width, 0b010011, valty,
 
 // Memory
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-def LD#suffix : RVReviveLoad<width, valty, memimm, "revive.wld"#asmsuffix>;
+def LD#suffix : RVReviveLoad<!if(width, 0b110, 0b100), valty,
+                             "revive.wld"#asmsuffix>;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-def ST#suffix : RVReviveStore<width, valty, memimm, "revive.wst"#asmsuffix>;
+def ST#suffix : RVReviveStore<!if(width, 0b111, 0b101), valty,
+                              "revive.wst"#asmsuffix>;
 } // Predicates = [HasVendorXReviveVec]
 }
 
-defm REVIVE_W_ : RVReviveOps<0, VRM2, "", "", simm12_lsb0>;
-defm REVIVE_W_ : RVReviveOps<1, VR, "_128", ".i128", simm12_lsb0_widthflag>;
+defm REVIVE_W_ : RVReviveOps<0, VRM2, "", "">;
+defm REVIVE_W_ : RVReviveOps<1, VR, "_128", ".i128">;
 
 //===----------------------------------------------------------------------===//
 // Routines that revive currently open-codes in stdlib.ll
@@ -245,15 +204,14 @@ def REVIVE_W_SIGNEXT: RVReviveALU<0, 0b001011, VRM2, "revive.wsignextend">;
 // Selection patterns
 //===----------------------------------------------------------------------===//
 
-// The addressing mode of the wide memory instructions: only an even constant
-// offset folds into the instruction, so a symbol or an odd offset is left in the
-// address for a scalar instruction to add.
+// The addressing mode of the wide memory instructions: a constant offset folds
+// into the instruction, a symbol is left in the address for a scalar instruction
+// to add.
 def AddrRegImmWide : ComplexPattern<iPTR, 2, "SelectAddrRegImmWide">;
 
 // The patterns for one wide type, naming the instructions RVReviveOps defined
 // for it.
-multiclass RVRevivePats<ValueType vt, DAGOperand valty, string suffix,
-                        DAGOperand memimm> {
+multiclass RVRevivePats<ValueType vt, DAGOperand valty, string suffix> {
 defvar W_ADD   = !cast<Instruction>("REVIVE_W_ADD"#suffix);
 defvar W_SUB   = !cast<Instruction>("REVIVE_W_SUB"#suffix);
 defvar W_MUL   = !cast<Instruction>("REVIVE_W_MUL"#suffix);
@@ -368,16 +326,16 @@ def : Pat<(vt (sextloadi16 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
 def : Pat<(vt (sextloadi32 (AddrRegImm (XLenVT GPR:$rs1), simm12_lo:$imm12))),
           (W_SEXT (LW GPR:$rs1, simm12_lo:$imm12))>;
 
-def : Pat<(vt (load (AddrRegImmWide (XLenVT GPR:$rs1), memimm:$imm12))),
-          (W_LD GPR:$rs1, memimm:$imm12)>;
-def : Pat<(store (vt valty:$rs2), (AddrRegImmWide (XLenVT GPR:$rs1), memimm:$imm12)),
-          (W_ST (vt valty:$rs2), GPR:$rs1, memimm:$imm12)>;
+def : Pat<(vt (load (AddrRegImmWide (XLenVT GPR:$rs1), simm12_lo:$imm12))),
+          (W_LD GPR:$rs1, simm12_lo:$imm12)>;
+def : Pat<(store (vt valty:$rs2), (AddrRegImmWide (XLenVT GPR:$rs1), simm12_lo:$imm12)),
+          (W_ST (vt valty:$rs2), GPR:$rs1, simm12_lo:$imm12)>;
 }
 
 let Predicates = [HasVendorXReviveVec] in {
-defm : RVRevivePats<i256, VRM2, "", simm12_lsb0>;
+defm : RVRevivePats<i256, VRM2, "">;
 // Inert unless -riscv-revive-i128 has made the type legal.
-defm : RVRevivePats<i128, VR, "_128", simm12_lsb0_widthflag>;
+defm : RVRevivePats<i128, VR, "_128">;
 
 // Converting between the two wide types, which only arises once both are legal.
 // The register forms are subregister moves rather than instructions, so they

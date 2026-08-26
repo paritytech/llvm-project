@@ -3365,15 +3365,14 @@ bool RISCVDAGToDAGISel::SelectAddrRegImmLsb00000(SDValue Addr, SDValue &Base,
   return true;
 }
 
-/// The addressing mode of the XReviveVec wide memory instructions: an even
-/// constant offset, or nothing at all.
+/// The addressing mode of the XReviveVec wide memory instructions: a constant
+/// offset, or nothing at all.
 ///
-/// Unlike SelectAddrRegImm this folds neither the low part of a symbol, which
-/// the PolkaVM linker will not relocate inside one of these instructions, nor an
-/// odd offset, which the encoding no longer has room for. Both are left in the
-/// address, where a scalar instruction adds them. An offset too large to fold
-/// stays in the address whole rather than being split the way SelectAddrRegImm
-/// splits one, because the two halves of such a split are not both even.
+/// Unlike SelectAddrRegImm this never folds the low part of a symbol: the
+/// PolkaVM linker decodes these instructions whole and will not relocate one, so
+/// the symbol is left in the address, where a scalar instruction adds it. Any
+/// offset the field can hold folds, and one it cannot stays in the address whole
+/// rather than being split across an ADDI the way SelectAddrRegImm splits it.
 bool RISCVDAGToDAGISel::SelectAddrRegImmWide(SDValue Addr, SDValue &Base,
                                              SDValue &Offset) {
   if (SelectAddrFrameIndex(Addr, Base, Offset))
@@ -3384,7 +3383,7 @@ bool RISCVDAGToDAGISel::SelectAddrRegImmWide(SDValue Addr, SDValue &Base,
 
   if (CurDAG->isBaseWithConstantOffset(Addr)) {
     int64_t CVal = cast<ConstantSDNode>(Addr.getOperand(1))->getSExtValue();
-    if (isShiftedInt<11, 1>(CVal)) {
+    if (isInt<12>(CVal)) {
       Base = Addr.getOperand(0);
       if (auto *FIN = dyn_cast<FrameIndexSDNode>(Base))
         Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), VT);

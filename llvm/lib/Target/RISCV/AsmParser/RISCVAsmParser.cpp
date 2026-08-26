@@ -870,10 +870,6 @@ public:
             VK == ELF::R_RISCV_TLSDESC_ADD_LO12);
   }
 
-  bool isSImm12Lsb0() const {
-    return isSImmPred([](int64_t Imm) { return isShiftedInt<11, 1>(Imm); });
-  }
-
   bool isSImm12Lsb00000() const {
     return isSImmPred([](int64_t Imm) { return isShiftedInt<7, 5>(Imm); });
   }
@@ -1607,7 +1603,6 @@ bool RISCVAsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
         "operand must be a symbol with %lo/%pcrel_lo/%tprel_lo specifier or an "
         "integer in the range");
   case Match_InvalidBareSImm12Lsb0:
-  case Match_InvalidSImm12Lsb0:
     return generateImmOutOfRangeError(
         Operands, ErrorInfo, -(1 << 11), (1 << 11) - 2,
         "immediate must be a multiple of 2 bytes in the range");
