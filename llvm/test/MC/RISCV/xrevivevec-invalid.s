@@ -27,5 +27,10 @@ revive.wst v8, %lo(foo)(a0) # CHECK: :[[@LINE]]:16: error: immediate must be a m
 revive.wld.i128 v8, %lo(foo)(a0) # CHECK: :[[@LINE]]:21: error: immediate must be a multiple of 2 bytes in the range [-2048, 2046]
 revive.wst.i128 v8, %lo(foo)(a0) # CHECK: :[[@LINE]]:21: error: immediate must be a multiple of 2 bytes in the range [-2048, 2046]
 
+## Third operand. The conversions pin rs2 to zero: sharing funct3 000 with the
+## arithmetic does not give them its second source.
+revive.wmv v8, v10, v12 # CHECK: :[[@LINE]]:21: error: invalid operand for instruction
+revive.wzext v8, a0, a1 # CHECK: :[[@LINE]]:22: error: invalid operand for instruction
+
 ## Without the extension. Every mnemonic here needs it, at either width.
 revive.wadd.i128 v8, v8, v10 # CHECK-NO-EXT: :[[@LINE]]:1: error: instruction requires the following: 'XReviveVec' (revive 256-bit wide integer instructions)

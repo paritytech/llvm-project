@@ -106,28 +106,28 @@ revive.wsltu.i128 a0, v8, v10
 revive.wslt.i128 a0, v8, v10
 
 # CHECK: revive.wmv.i128	v8, v10
-# CHECK: encoding: [0x5b,0x64,0x05,0x80]
+# CHECK: encoding: [0x5b,0x04,0x05,0x98]
 revive.wmv.i128 v8, v10
 # CHECK: revive.wbswap.i128	v8, v10
-# CHECK: encoding: [0x5b,0x64,0x05,0x84]
+# CHECK: encoding: [0x5b,0x04,0x05,0x9c]
 revive.wbswap.i128 v8, v10
 # CHECK: revive.wtrunc.i128	a0, v10
-# CHECK: encoding: [0x5b,0x65,0x05,0x82]
+# CHECK: encoding: [0x5b,0x05,0x05,0x9a]
 revive.wtrunc.i128 a0, v10
 # CHECK: revive.wcpop.i128	a0, v10
-# CHECK: encoding: [0x5b,0x65,0x05,0x86]
+# CHECK: encoding: [0x5b,0x05,0x05,0x9e]
 revive.wcpop.i128 a0, v10
 # CHECK: revive.wclz.i128	a0, v10
-# CHECK: encoding: [0x5b,0x65,0x05,0x88]
+# CHECK: encoding: [0x5b,0x05,0x05,0xa0]
 revive.wclz.i128 a0, v10
 # CHECK: revive.wctz.i128	a0, v10
-# CHECK: encoding: [0x5b,0x65,0x05,0x8a]
+# CHECK: encoding: [0x5b,0x05,0x05,0xa2]
 revive.wctz.i128 a0, v10
 # CHECK: revive.wzext.i128	v8, a0
-# CHECK: encoding: [0x5b,0x74,0x05,0x80]
+# CHECK: encoding: [0x5b,0x04,0x05,0xa4]
 revive.wzext.i128 v8, a0
 # CHECK: revive.wsext.i128	v8, a0
-# CHECK: encoding: [0x5b,0x74,0x05,0x82]
+# CHECK: encoding: [0x5b,0x04,0x05,0xa6]
 revive.wsext.i128 v8, a0
 
 # The offsets are the same plain even integers, and they occupy the same eleven

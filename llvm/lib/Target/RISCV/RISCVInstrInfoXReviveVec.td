@@ -82,9 +82,12 @@ def riscv_wide_ctz : RVSDNode<"WIDE_CTZ", SDT_ReviveCount>;
 // Encodings
 //===----------------------------------------------------------------------===//
 
-// custom-2 opcode space, leaving custom-3 for XReviveCarry. funct3 selects the
-// operand shape, funct7 the operation within it: the top funct7 bit is the
-// width, so one operation keeps one funct6 at every width it exists at.
+// custom-2 opcode space, leaving custom-3 for XReviveCarry. funct3 groups the
+// operand shapes and funct6 names the operation within a group: the top funct7
+// bit is the width, so one operation keeps one funct6 at every width it exists
+// at. funct3 has eight values where funct6 has sixty-four, so the conversions
+// take no funct3 of their own: they sit above the arithmetic in funct3 000, at
+// funct6 12 through 19.
 class RVReviveALU<bit width, bits<6> funct6, DAGOperand valty, string opcodestr>
     : RVInstR<{width, funct6}, 0b000, OPC_CUSTOM_2, (outs valty:$rd),
               (ins valty:$rs1, valty:$rs2), opcodestr, "$rd, $rs1, $rs2">;
@@ -103,14 +106,14 @@ class RVReviveShift<bit width, bits<6> funct6, DAGOperand valty,
 // Conversions between a wide value and an XLen one.
 class RVReviveCvtToGPR<bit width, bits<6> funct6, DAGOperand valty,
                        string opcodestr>
-    : RVInstR<{width, funct6}, 0b110, OPC_CUSTOM_2, (outs GPR:$rd),
+    : RVInstR<{width, funct6}, 0b000, OPC_CUSTOM_2, (outs GPR:$rd),
               (ins valty:$rs1), opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
 
 class RVReviveCvtToWide<bit width, bits<6> funct6, DAGOperand valty,
                         string opcodestr>
-    : RVInstR<{width, funct6}, 0b111, OPC_CUSTOM_2, (outs valty:$rd),
+    : RVInstR<{width, funct6}, 0b000, OPC_CUSTOM_2, (outs valty:$rd),
               (ins GPR:$rs1), opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
@@ -118,7 +121,7 @@ class RVReviveCvtToWide<bit width, bits<6> funct6, DAGOperand valty,
 // A wide unary, which is also the shape a register copy takes.
 class RVReviveMove<bit width, bits<6> funct6, DAGOperand valty,
                    string opcodestr>
-    : RVInstR<{width, funct6}, 0b110, OPC_CUSTOM_2, (outs valty:$rd),
+    : RVInstR<{width, funct6}, 0b000, OPC_CUSTOM_2, (outs valty:$rd),
               (ins valty:$rs1), opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
@@ -189,21 +192,21 @@ def SLTU#suffix : RVReviveCmp<width, 0b000010, valty, "revive.wsltu"#asmsuffix>;
 def SLT#suffix  : RVReviveCmp<width, 0b000011, valty, "revive.wslt"#asmsuffix>;
 
 // Moves and conversions
-def MV#suffix    : RVReviveMove<width, 0b000000, valty,
+def MV#suffix    : RVReviveMove<width, 0b001100, valty,
                                 "revive.wmv"#asmsuffix>;
-def BSWAP#suffix : RVReviveMove<width, 0b000010, valty,
+def BSWAP#suffix : RVReviveMove<width, 0b001110, valty,
                                 "revive.wbswap"#asmsuffix>;
-def TRUNC#suffix : RVReviveCvtToGPR<width, 0b000001, valty,
+def TRUNC#suffix : RVReviveCvtToGPR<width, 0b001101, valty,
                                     "revive.wtrunc"#asmsuffix>;
-def CPOP#suffix  : RVReviveCvtToGPR<width, 0b000011, valty,
+def CPOP#suffix  : RVReviveCvtToGPR<width, 0b001111, valty,
                                     "revive.wcpop"#asmsuffix>;
-def CLZ#suffix   : RVReviveCvtToGPR<width, 0b000100, valty,
+def CLZ#suffix   : RVReviveCvtToGPR<width, 0b010000, valty,
                                     "revive.wclz"#asmsuffix>;
-def CTZ#suffix   : RVReviveCvtToGPR<width, 0b000101, valty,
+def CTZ#suffix   : RVReviveCvtToGPR<width, 0b010001, valty,
                                     "revive.wctz"#asmsuffix>;
-def ZEXT#suffix  : RVReviveCvtToWide<width, 0b000000, valty,
+def ZEXT#suffix  : RVReviveCvtToWide<width, 0b010010, valty,
                                      "revive.wzext"#asmsuffix>;
-def SEXT#suffix  : RVReviveCvtToWide<width, 0b000001, valty,
+def SEXT#suffix  : RVReviveCvtToWide<width, 0b010011, valty,
                                      "revive.wsext"#asmsuffix>;
 } // hasSideEffects = 0, mayLoad = 0, mayStore = 0
 
