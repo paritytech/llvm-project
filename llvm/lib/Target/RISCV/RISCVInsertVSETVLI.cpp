@@ -314,7 +314,10 @@ static VSETVLIInfo adjustIncoming(const VSETVLIInfo &PrevInfo,
 // legal for MI, but may not be the state requested by MI.
 void RISCVInsertVSETVLI::transferBefore(VSETVLIInfo &Info,
                                         const MachineInstr &MI) const {
-  if (RISCV::isVectorCopy(ST->getRegisterInfo(), MI) &&
+  // A vector copy needs a valid `vtype` because `vmvNr.v` reads it. Under XReviveVec a copy
+  // becomes `revive.wmvNr`, which carries the number of registers it moves and reads no vtype, so
+  // there is nothing here to configure for.
+  if (!ST->hasVendorXReviveVec() && RISCV::isVectorCopy(ST->getRegisterInfo(), MI) &&
       (Info.isUnknown() || !Info.isValid() || Info.hasSEWLMULRatioOnly())) {
     // Use an arbitrary but valid AVL and VTYPE so vill will be cleared. It may
     // be coalesced into another vsetvli since we won't demand any fields.
@@ -402,7 +405,7 @@ void RISCVInsertVSETVLI::transferAfter(VSETVLIInfo &Info,
 
   // If this is something that updates VL/VTYPE that we don't know about, set
   // the state to unknown.
-  if (MI.isCall() || MI.isInlineAsm() ||
+  if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
       MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
       MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
     Info = VSETVLIInfo::getUnknown();
@@ -418,7 +421,7 @@ bool RISCVInsertVSETVLI::computeVLVTYPEChanges(const MachineBasicBlock &MBB,
 
     if (RISCVInstrInfo::isVectorConfigInstr(MI) ||
         RISCVII::hasSEWOp(MI.getDesc().TSFlags) ||
-        RISCV::isVectorCopy(ST->getRegisterInfo(), MI) ||
+        (!ST->hasVendorXReviveVec() && RISCV::isVectorCopy(ST->getRegisterInfo(), MI)) ||
         RISCVInstrInfo::isXSfmmVectorConfigInstr(MI))
       HadVectorOp = true;
 
@@ -549,7 +552,7 @@ void RISCVInsertVSETVLI::emitVSETVLIs(MachineBasicBlock &MBB) {
       PrefixTransparent = false;
     }
 
-    if (EnsureWholeVectorRegisterMoveValidVTYPE &&
+    if (EnsureWholeVectorRegisterMoveValidVTYPE && !ST->hasVendorXReviveVec() &&
         RISCV::isVectorCopy(ST->getRegisterInfo(), MI)) {
       if (!PrevInfo.isCompatible(DemandedFields::all(), CurInfo, LIS)) {
         insertVSETVLI(MBB, MI, MI.getDebugLoc(), CurInfo, PrevInfo);
@@ -620,7 +623,7 @@ void RISCVInsertVSETVLI::emitVSETVLIs(MachineBasicBlock &MBB) {
                                               /*isImp*/ true));
     }
 
-    if (MI.isCall() || MI.isInlineAsm() ||
+    if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
         MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
         MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
       PrefixTransparent = false;
@@ -821,7 +824,7 @@ void RISCVInsertVSETVLI::coalesceVSETVLIs(MachineBasicBlock &MBB) const {
 
     if (!RISCVInstrInfo::isVectorConfigInstr(MI)) {
       Used.doUnion(getDemanded(MI, ST));
-      if (MI.isCall() || MI.isInlineAsm() ||
+      if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
           MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
           MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
         NextMI = nullptr;

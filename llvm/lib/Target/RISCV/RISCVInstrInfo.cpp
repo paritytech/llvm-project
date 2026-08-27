@@ -51,6 +51,12 @@ STATISTIC(NumVRegSpilled,
 STATISTIC(NumVRegReloaded,
           "Number of registers within vector register groups reloaded");
 
+static cl::opt<bool> ReviveOutlineVTYPE(
+    "riscv-revive-outline-vtype", cl::Hidden, cl::init(false),
+    cl::desc("Allow the outliner to lift XReviveVec instructions that read vtype. Their width "
+             "then depends on the call site, which PolkaVM's linker cannot recover; this exists "
+             "to measure what the restriction costs."));
+
 static cl::opt<bool> PreferWholeRegisterMove(
     "riscv-prefer-whole-register-move", cl::init(false), cl::Hidden,
     cl::desc("Prefer whole register move for vector registers."));
@@ -380,6 +386,43 @@ static bool isConvertibleToVMV_V_V(const RISCVSubtarget &STI,
   return false;
 }
 
+/// The extension's own register move for a chunk of `LMul` registers, standing in for `vmvNr.v`.
+/// It carries the count rather than reading `vtype`, because a copy is expanded after the vsetvli
+/// insertion has already run.
+static unsigned reviveWideMoveOpcode(RISCVVType::VLMUL LMul) {
+  switch (LMul) {
+  case RISCVVType::LMUL_8:
+    return RISCV::REVIVE_MV8R;
+  case RISCVVType::LMUL_4:
+    return RISCV::REVIVE_MV4R;
+  case RISCVVType::LMUL_2:
+    return RISCV::REVIVE_MV2R;
+  default:
+    return RISCV::REVIVE_MV1R;
+  }
+}
+
+/// The extension's own wide access for a spill of `RC`, or zero when there is none.
+///
+/// PolkaVM implements no standard vector instruction, so a wide spill cannot go through
+/// `vsNr.v`/`vlNr.v`. These are pseudos, so the vsetvli insertion establishes the width for them --
+/// it runs after the vector register allocation that creates them, and so sees them.
+static unsigned reviveWideSpillOpcode(const TargetRegisterClass *RC, bool IsLoad) {
+  // Widest first: a register of a wider group is reachable through the narrower classes too.
+  if (RISCV::VRM8RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::PseudoREVIVE_W_LD_M8 : RISCV::PseudoREVIVE_W_ST_M8;
+  if (RISCV::VRM4RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::PseudoREVIVE_W_LD_M4 : RISCV::PseudoREVIVE_W_ST_M4;
+  if (RISCV::VRM2RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::PseudoREVIVE_W_LD_M2 : RISCV::PseudoREVIVE_W_ST_M2;
+  if (RISCV::VRRegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::PseudoREVIVE_W_LD_M1 : RISCV::PseudoREVIVE_W_ST_M1;
+  return 0;
+}
+
+/// SEW for the XReviveVec pseudos; nothing reads it, but a vtype has to name one.
+static constexpr int64_t ReviveLog2SEW = 6;
+
 void RISCVInstrInfo::copyPhysRegVector(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
     const DebugLoc &DL, MCRegister DstReg, MCRegister SrcReg, bool KillSrc,
@@ -456,9 +499,15 @@ void RISCVInstrInfo::copyPhysRegVector(
         GetCopyInfo(SrcEncoding, DstEncoding);
     auto [NumCopied, _] = RISCVVType::decodeVLMUL(LMulCopied);
 
+    // The loop above decides how many registers this chunk covers, and taking the width from it is
+    // what keeps a wide copy whole: short-circuiting the loop instead would copy only part of a
+    // value.
+    bool IsWideMove = STI.hasVendorXReviveVec();
     MachineBasicBlock::const_iterator DefMBBI;
-    if (LMul == LMulCopied &&
-        isConvertibleToVMV_V_V(STI, MBB, MBBI, DefMBBI, LMul)) {
+    if (IsWideMove) {
+      Opc = reviveWideMoveOpcode(LMulCopied);
+    } else if (LMul == LMulCopied &&
+               isConvertibleToVMV_V_V(STI, MBB, MBBI, DefMBBI, LMul)) {
       Opc = VVOpc;
       if (DefMBBI->getOpcode() == VIOpc)
         Opc = VIOpc;
@@ -644,6 +693,23 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   llvm_unreachable("Impossible reg-to-reg copy");
 }
 
+// RVV spill slots are scalable because VLEN is normally unknown. When it is known exactly the slot
+// is a fixed number of bytes, addressable at an immediate offset instead of through vlenb.
+static bool useFixedRVVSlot(MachineFrameInfo &MFI, int FI,
+                            const TargetRegisterClass *RC,
+                            const RISCVSubtarget &STI,
+                            const RISCVRegisterInfo &RegInfo) {
+  if (!STI.hasVendorXReviveVec())
+    return false;
+  std::optional<unsigned> VLen = STI.getRealVLen();
+  if (!VLen)
+    return false;
+  // The class size is the minimum, at VLEN = RVVBitsPerBlock; scale to the real width.
+  uint64_t Bits = RegInfo.getRegSizeInBits(*RC).getKnownMinValue();
+  MFI.setObjectSize(FI, Bits / 8 * (*VLen / RISCV::RVVBitsPerBlock));
+  return true;
+}
+
 void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator I,
                                          Register SrcReg, bool IsKill, int FI,
@@ -653,6 +719,27 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   MachineFunction *MF = MBB.getParent();
   MachineFrameInfo &MFI = MF->getFrameInfo();
   Align Alignment = MFI.getObjectAlign(FI);
+
+  // A wide spill goes through the extension's own access, not `vsNr.v`/`vlNr.v`: PolkaVM
+  // implements no standard vector instruction. These are pseudos, so the vsetvli insertion
+  // establishes the width for them.
+  if (STI.hasVendorXReviveVec()) {
+    if (unsigned Wide = reviveWideSpillOpcode(RC, /*IsLoad=*/false)) {
+      useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
+      MachineMemOperand *MMO = MF->getMachineMemOperand(
+          MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
+          TypeSize::getFixed(MFI.getObjectSize(FI)), MFI.getObjectAlign(FI));
+      BuildMI(MBB, I, DebugLoc(), get(Wide))
+          .addReg(SrcReg, getKillRegState(IsKill))
+          .addFrameIndex(FI)
+          .addImm(0)
+          .addImm(RISCV::VLMaxSentinel)
+          .addImm(ReviveLog2SEW)
+          .addMemOperand(MMO)
+          .setMIFlag(Flags);
+      return;
+    }
+  }
 
   unsigned Opcode;
   if (RISCV::GPRRegClass.hasSubClassEq(RC)) {
@@ -709,11 +796,15 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
     llvm_unreachable("Can't store this register to stack slot");
 
   if (RISCVRegisterInfo::isRVVRegClass(RC)) {
+    bool Fixed = useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
     MachineMemOperand *MMO = MF->getMachineMemOperand(
         MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
-        TypeSize::getScalable(MFI.getObjectSize(FI)), Alignment);
+        Fixed ? TypeSize::getFixed(MFI.getObjectSize(FI))
+              : TypeSize::getScalable(MFI.getObjectSize(FI)),
+        Alignment);
 
-    MFI.setStackID(FI, TargetStackID::ScalableVector);
+    if (!Fixed)
+      MFI.setStackID(FI, TargetStackID::ScalableVector);
     BuildMI(MBB, I, DebugLoc(), get(Opcode))
         .addReg(SrcReg, getKillRegState(IsKill))
         .addFrameIndex(FI)
@@ -745,6 +836,26 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   Align Alignment = MFI.getObjectAlign(FI);
   DebugLoc DL =
       Flags & MachineInstr::FrameDestroy ? MBB.findDebugLoc(I) : DebugLoc();
+
+  // A wide spill goes through the extension's own access, not `vsNr.v`/`vlNr.v`: PolkaVM
+  // implements no standard vector instruction. These are pseudos, so the vsetvli insertion
+  // establishes the width for them.
+  if (STI.hasVendorXReviveVec()) {
+    if (unsigned Wide = reviveWideSpillOpcode(RC, /*IsLoad=*/true)) {
+      useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
+      MachineMemOperand *MMO = MF->getMachineMemOperand(
+          MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
+          TypeSize::getFixed(MFI.getObjectSize(FI)), MFI.getObjectAlign(FI));
+      BuildMI(MBB, I, DL, get(Wide), DstReg)
+          .addFrameIndex(FI)
+          .addImm(0)
+          .addImm(RISCV::VLMaxSentinel)
+          .addImm(ReviveLog2SEW)
+          .addMemOperand(MMO)
+          .setMIFlag(Flags);
+      return;
+    }
+  }
 
   unsigned Opcode;
   if (RISCV::GPRRegClass.hasSubClassEq(RC)) {
@@ -801,11 +912,15 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     llvm_unreachable("Can't load this register from stack slot");
 
   if (RISCVRegisterInfo::isRVVRegClass(RC)) {
+    bool Fixed = useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
     MachineMemOperand *MMO = MF->getMachineMemOperand(
         MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
-        TypeSize::getScalable(MFI.getObjectSize(FI)), Alignment);
+        Fixed ? TypeSize::getFixed(MFI.getObjectSize(FI))
+              : TypeSize::getScalable(MFI.getObjectSize(FI)),
+        Alignment);
 
-    MFI.setStackID(FI, TargetStackID::ScalableVector);
+    if (!Fixed)
+      MFI.setStackID(FI, TargetStackID::ScalableVector);
     BuildMI(MBB, I, DL, get(Opcode), DstReg)
         .addFrameIndex(FI)
         .addMemOperand(MMO)
@@ -3777,6 +3892,15 @@ RISCVInstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
   }
 
   if (isLPAD(MI))
+    return outliner::InstrType::Illegal;
+
+  // XReviveVec reads a wide instruction's width from `vtype`, so an outlined sequence would be
+  // polymorphic in it. That executes correctly -- every call site gets the semantics its own
+  // configuration implies -- but it makes the width a property of the call site rather than of
+  // the instruction stream, and PolkaVM's linker has to recover it statically. Keep anything
+  // that reads or writes `vtype` where the configuration establishing it is visible.
+  if (STI.hasVendorXReviveVec() && !ReviveOutlineVTYPE &&
+      (MI.readsRegister(RISCV::VTYPE, TRI) || MI.modifiesRegister(RISCV::VTYPE, TRI)))
     return outliner::InstrType::Illegal;
 
   return outliner::InstrType::Legal;

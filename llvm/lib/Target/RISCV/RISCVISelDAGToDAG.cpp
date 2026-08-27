@@ -27,6 +27,10 @@
 
 using namespace llvm;
 
+// SEW for the XReviveVec pseudos; nothing reads it, but a vtype must name one.
+// Must match the .td.
+static constexpr unsigned ReviveLog2SEW = 6;
+
 #define DEBUG_TYPE "riscv-isel"
 #define PASS_NAME "RISC-V DAG->DAG Pattern Instruction Selection"
 
@@ -1024,6 +1028,31 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
 
   switch (Opcode) {
   case ISD::Constant: {
+    if (VT == MVT::i256) {
+      // Build XLen-sized values in a register instead of a 32-byte pool entry
+      // plus its load. Done here rather than in lowering because a ZERO_EXTEND
+      // of a constant folds back into one; wider values became a pool load
+      // during legalization and never reach this point.
+      const APInt &Value = Node->getAsAPIntVal();
+      bool IsSigned = Value.getActiveBits() > 64;
+      assert((!IsSigned || Value.getSignificantBits() <= 64) &&
+             "Wide constant should have been pooled");
+
+      SDValue Materialised =
+          selectImm(CurDAG, DL, XLenVT,
+                    IsSigned ? Value.getSExtValue() : Value.getZExtValue(),
+                    *Subtarget);
+      // The pseudo reads vtype for its width, so it carries the AVL and SEW
+      // that name LMUL=2.
+      SDValue Ops[] = {Materialised,
+                       CurDAG->getTargetConstant(RISCV::VLMaxSentinel, DL, XLenVT),
+                       CurDAG->getTargetConstant(ReviveLog2SEW, DL, XLenVT)};
+      ReplaceNode(Node, CurDAG->getMachineNode(
+                            IsSigned ? RISCV::PseudoREVIVE_W_SEXT_M2
+                                     : RISCV::PseudoREVIVE_W_ZEXT_M2,
+                            DL, MVT::i256, Ops));
+      return;
+    }
     assert(VT == Subtarget->getXLenVT() && "Unexpected VT");
     auto *ConstNode = cast<ConstantSDNode>(Node);
     if (ConstNode->isZero()) {
@@ -3608,6 +3637,11 @@ bool RISCVDAGToDAGISel::selectSETCC(SDValue N, ISD::CondCode ExpectedCCVal,
   SDValue RHS = N->getOperand(1);
 
   if (!LHS.getValueType().isScalarInteger())
+    return false;
+
+  // This rewrites the compare into XLen arithmetic on the operands, so it must
+  // not fire for i256, which is scalar and legal but lives in VRM2.
+  if (LHS.getValueType() != Subtarget->getXLenVT())
     return false;
 
   // If the RHS side is 0, we don't need any extra instructions, return the LHS.

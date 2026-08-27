@@ -481,6 +481,25 @@ bool llvm::CC_RISCV(unsigned ValNo, MVT ValVT, MVT LocVT,
   assert(PendingLocs.size() == PendingArgFlags.size() &&
          "PendingLocs and PendingArgFlags out of sync");
 
+  // Pass i256 in a vector register pair instead of by reference, which costs
+  // ~112 bytes of marshalling per call site. Split arguments keep to the generic
+  // path, which owns the pending-location bookkeeping.
+  if ((LocVT == MVT::i256 || LocVT == MVT::i512 || LocVT == MVT::i1024) &&
+      !ArgFlags.isSplit() && PendingLocs.empty()) {
+    ArrayRef<MCPhysReg> Regs = LocVT == MVT::i256   ? ArrayRef(ArgVRM2s)
+                               : LocVT == MVT::i512 ? ArrayRef(ArgVRM4s)
+                                                    : ArrayRef(ArgVRM8s);
+    unsigned Bytes = LocVT.getSizeInBits() / 8;
+    if (MCRegister Reg = State.AllocateReg(Regs)) {
+      State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+      return false;
+    }
+    // Out of registers: the stack slot must be as aligned as the type.
+    unsigned Offset = State.AllocateStack(32, Align(32));
+    State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
+    return false;
+  }
+
   // Handle passing f64 on RV32D with a soft float ABI or when floating point
   // registers are exhausted.
   if (XLen == 32 && LocVT == MVT::f64) {
@@ -626,6 +645,22 @@ bool llvm::CC_RISCV_FastCC(unsigned ValNo, MVT ValVT, MVT LocVT,
   const RISCVSubtarget &Subtarget = MF.getSubtarget<RISCVSubtarget>();
   const RISCVTargetLowering &TLI = *Subtarget.getTargetLowering();
   RISCVABI::ABI ABI = Subtarget.getTargetABI();
+
+  // As above. revive gives its internal functions fastcc, so most i256
+  // arguments actually take this path.
+  if ((LocVT == MVT::i256 || LocVT == MVT::i512 || LocVT == MVT::i1024) &&
+      !ArgFlags.isSplit()) {
+    ArrayRef<MCPhysReg> Regs = LocVT == MVT::i256   ? ArrayRef(ArgVRM2s)
+                               : LocVT == MVT::i512 ? ArrayRef(ArgVRM4s)
+                                                    : ArrayRef(ArgVRM8s);
+    if (MCRegister Reg = State.AllocateReg(Regs)) {
+      State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+      return false;
+    }
+    unsigned Offset = State.AllocateStack(LocVT.getSizeInBits() / 8, Align(32));
+    State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
+    return false;
+  }
 
   if ((LocVT == MVT::f16 && Subtarget.hasStdExtZfhmin()) ||
       (LocVT == MVT::bf16 && Subtarget.hasStdExtZfbfmin())) {

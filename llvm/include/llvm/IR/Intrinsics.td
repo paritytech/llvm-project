@@ -349,6 +349,9 @@ def IIT_ONE_NTH_ELTS_VEC_ARG : IIT_Base<27>;
 def IIT_SAME_VEC_WIDTH_ARG : IIT_Base<28>;
 def IIT_VEC_OF_ANYPTRS_TO_ELT : IIT_Base<29>;
 def IIT_I128 : IIT_Int<128, 30>;
+// XReviveVec needs a 256-bit scalar in an intrinsic signature; no in-tree target
+// had one before, so the encoding stopped at 128.
+def IIT_I256 : IIT_Int<256, 54>;
 def IIT_V512 : IIT_Vec<512, 31>;
 def IIT_V1024 : IIT_Vec<1024, 32>;
 def IIT_F128 : IIT_VT<f128, 33>;
@@ -531,6 +534,7 @@ def llvm_i16_ty        : LLVMType<i16>;
 def llvm_i32_ty        : LLVMType<i32>;
 def llvm_i64_ty        : LLVMType<i64>;
 def llvm_i128_ty       : LLVMType<i128>;
+def llvm_i256_ty       : LLVMType<i256>;
 def llvm_half_ty       : LLVMType<f16>;
 def llvm_bfloat_ty     : LLVMType<bf16>;
 def llvm_float_ty      : LLVMType<f32>;
