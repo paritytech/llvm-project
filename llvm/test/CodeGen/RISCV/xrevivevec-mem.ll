@@ -8,7 +8,8 @@
 define i256 @load_i256(ptr %p) {
 ; CHECK-LABEL: load_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.ld256 v8, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wld v8, 0(a0)
 ; CHECK-NEXT:    ret
   %v = load i256, ptr %p
   ret i256 %v
@@ -17,7 +18,8 @@ define i256 @load_i256(ptr %p) {
 define void @store_i256(ptr %p, i256 %v) {
 ; CHECK-LABEL: store_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.st256 v8, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wst v8, 0(a0)
 ; CHECK-NEXT:    ret
   store i256 %v, ptr %p
   ret void
@@ -26,7 +28,8 @@ define void @store_i256(ptr %p, i256 %v) {
 define i256 @load_i256_offset(ptr %p) {
 ; CHECK-LABEL: load_i256_offset:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.ld256 v8, 32(a0)
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wld v8, 32(a0)
 ; CHECK-NEXT:    ret
   %q = getelementptr i256, ptr %p, i64 1
   %v = load i256, ptr %q
@@ -37,10 +40,11 @@ define i256 @extload_i8(ptr %p) {
 ; CHECK-LABEL: extload_i8:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lbu a0, 0(a0)
-; CHECK-NEXT:    revive.zext256 v8, a0
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    li a0, 255
-; CHECK-NEXT:    revive.zext256 v10, a0
-; CHECK-NEXT:    revive.and256 v8, v8, v10
+; CHECK-NEXT:    revive.wzext v10, a0
+; CHECK-NEXT:    revive.wand v8, v8, v10
 ; CHECK-NEXT:    ret
   %v = load i8, ptr %p
   %r = zext i8 %v to i256
@@ -51,11 +55,12 @@ define i256 @extload_i32(ptr %p) {
 ; CHECK-LABEL: extload_i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lwu a0, 0(a0)
-; CHECK-NEXT:    revive.zext256 v8, a0
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    li a0, -1
 ; CHECK-NEXT:    srli a0, a0, 32
-; CHECK-NEXT:    revive.zext256 v10, a0
-; CHECK-NEXT:    revive.and256 v8, v8, v10
+; CHECK-NEXT:    revive.wzext v10, a0
+; CHECK-NEXT:    revive.wand v8, v8, v10
 ; CHECK-NEXT:    ret
   %v = load i32, ptr %p
   %r = zext i32 %v to i256
@@ -66,10 +71,11 @@ define i256 @extload_i64(ptr %p) {
 ; CHECK-LABEL: extload_i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld a0, 0(a0)
-; CHECK-NEXT:    revive.zext256 v8, a0
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    li a0, -1
-; CHECK-NEXT:    revive.zext256 v10, a0
-; CHECK-NEXT:    revive.and256 v8, v8, v10
+; CHECK-NEXT:    revive.wzext v10, a0
+; CHECK-NEXT:    revive.wand v8, v8, v10
 ; CHECK-NEXT:    ret
   %v = load i64, ptr %p
   %r = zext i64 %v to i256
@@ -80,10 +86,11 @@ define i256 @sextload_i32(ptr %p) {
 ; CHECK-LABEL: sextload_i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lwu a0, 0(a0)
-; CHECK-NEXT:    revive.zext256 v8, a0
-; CHECK-NEXT:    revive.trunc256 a0, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
+; CHECK-NEXT:    revive.wtrunc a0, v8
 ; CHECK-NEXT:    sext.w a0, a0
-; CHECK-NEXT:    revive.sext256 v8, a0
+; CHECK-NEXT:    revive.wsext v8, a0
 ; CHECK-NEXT:    ret
   %v = load i32, ptr %p
   %r = sext i32 %v to i256
@@ -93,7 +100,8 @@ define i256 @sextload_i32(ptr %p) {
 define void @truncstore_i8(ptr %p, i256 %v) {
 ; CHECK-LABEL: truncstore_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.trunc256 a1, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wtrunc a1, v8
 ; CHECK-NEXT:    sb a1, 0(a0)
 ; CHECK-NEXT:    ret
   %t = trunc i256 %v to i8
@@ -104,7 +112,8 @@ define void @truncstore_i8(ptr %p, i256 %v) {
 define void @truncstore_i64(ptr %p, i256 %v) {
 ; CHECK-LABEL: truncstore_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.trunc256 a1, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wtrunc a1, v8
 ; CHECK-NEXT:    sd a1, 0(a0)
 ; CHECK-NEXT:    ret
   %t = trunc i256 %v to i64
@@ -116,10 +125,11 @@ define void @truncstore_i64(ptr %p, i256 %v) {
 define void @truncstore_i128(ptr %p, i256 %v) {
 ; CHECK-LABEL: truncstore_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.trunc256 a1, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wtrunc a1, v8
 ; CHECK-NEXT:    li a2, 64
-; CHECK-NEXT:    revive.srl256 v8, v8, a2
-; CHECK-NEXT:    revive.trunc256 a2, v8
+; CHECK-NEXT:    revive.wsrl v8, v8, a2
+; CHECK-NEXT:    revive.wtrunc a2, v8
 ; CHECK-NEXT:    sd a1, 0(a0)
 ; CHECK-NEXT:    sd a2, 8(a0)
 ; CHECK-NEXT:    ret
@@ -133,11 +143,12 @@ define i256 @extload_i128(ptr %p) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld a1, 8(a0)
 ; CHECK-NEXT:    ld a0, 0(a0)
-; CHECK-NEXT:    revive.zext256 v8, a1
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a1
 ; CHECK-NEXT:    li a1, 64
-; CHECK-NEXT:    revive.sll256 v8, v8, a1
-; CHECK-NEXT:    revive.zext256 v10, a0
-; CHECK-NEXT:    revive.or256 v8, v10, v8
+; CHECK-NEXT:    revive.wsll v8, v8, a1
+; CHECK-NEXT:    revive.wzext v10, a0
+; CHECK-NEXT:    revive.wor v8, v10, v8
 ; CHECK-NEXT:    ret
   %v = load i128, ptr %p
   %r = zext i128 %v to i256
@@ -147,7 +158,8 @@ define i256 @extload_i128(ptr %p) {
 define i64 @trunc_to_i64(i256 %a) {
 ; CHECK-LABEL: trunc_to_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.trunc256 a0, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wtrunc a0, v8
 ; CHECK-NEXT:    ret
   %r = trunc i256 %a to i64
   ret i64 %r
@@ -156,7 +168,8 @@ define i64 @trunc_to_i64(i256 %a) {
 define i256 @zext_from_i64(i64 %a) {
 ; CHECK-LABEL: zext_from_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.zext256 v8, a0
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   %r = zext i64 %a to i256
   ret i256 %r
@@ -165,7 +178,8 @@ define i256 @zext_from_i64(i64 %a) {
 define i256 @sext_from_i64(i64 %a) {
 ; CHECK-LABEL: sext_from_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sext256 v8, a0
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wsext v8, a0
 ; CHECK-NEXT:    ret
   %r = sext i64 %a to i256
   ret i256 %r

@@ -76,10 +76,11 @@ define i64 @narrow_mul(i64 %a, i64 %b) {
 ;
 ; NOMUL-LABEL: narrow_mul:
 ; NOMUL:       # %bb.0:
-; NOMUL-NEXT:    revive.zext256 v8, a0
-; NOMUL-NEXT:    revive.zext256 v10, a1
-; NOMUL-NEXT:    revive.mul256 v8, v8, v10
-; NOMUL-NEXT:    revive.trunc256 a0, v8
+; NOMUL-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; NOMUL-NEXT:    revive.wzext v8, a0
+; NOMUL-NEXT:    revive.wzext v10, a1
+; NOMUL-NEXT:    revive.wmul v8, v8, v10
+; NOMUL-NEXT:    revive.wtrunc a0, v8
 ; NOMUL-NEXT:    ret
   %x = zext i64 %a to i256
   %y = zext i64 %b to i256
@@ -142,10 +143,11 @@ define i64 @narrow_add_1024(i64 %a, i64 %b) {
 define i64 @no_narrow_udiv(i64 %a, i64 %b) {
 ; CHECK-LABEL: no_narrow_udiv:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.zext256 v8, a0
-; CHECK-NEXT:    revive.zext256 v10, a1
-; CHECK-NEXT:    revive.divu256 v8, v8, v10
-; CHECK-NEXT:    revive.trunc256 a0, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
+; CHECK-NEXT:    revive.wzext v10, a1
+; CHECK-NEXT:    revive.wdivu v8, v8, v10
+; CHECK-NEXT:    revive.wtrunc a0, v8
 ; CHECK-NEXT:    ret
   %x = zext i64 %a to i256
   %y = zext i64 %b to i256
@@ -158,10 +160,11 @@ define i64 @no_narrow_udiv(i64 %a, i64 %b) {
 define i64 @no_narrow_lshr(i64 %a) {
 ; CHECK-LABEL: no_narrow_lshr:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.zext256 v8, a0
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    li a0, 3
-; CHECK-NEXT:    revive.srl256 v8, v8, a0
-; CHECK-NEXT:    revive.trunc256 a0, v8
+; CHECK-NEXT:    revive.wsrl v8, v8, a0
+; CHECK-NEXT:    revive.wtrunc a0, v8
 ; CHECK-NEXT:    ret
   %x = zext i64 %a to i256
   %r = lshr i256 %x, 3
@@ -173,9 +176,10 @@ define i64 @no_narrow_lshr(i64 %a) {
 define i64 @no_narrow_slt(i64 %a, i64 %b) {
 ; CHECK-LABEL: no_narrow_slt:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.zext256 v8, a0
-; CHECK-NEXT:    revive.zext256 v10, a1
-; CHECK-NEXT:    revive.slt256 a0, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
+; CHECK-NEXT:    revive.wzext v10, a1
+; CHECK-NEXT:    revive.wslt a0, v8, v10
 ; CHECK-NEXT:    ret
   %x = zext i64 %a to i256
   %y = zext i64 %b to i256
@@ -188,9 +192,10 @@ define i64 @no_narrow_slt(i64 %a, i64 %b) {
 define i256 @narrow_and_wide_use(i64 %a, i64 %b, ptr %p) {
 ; CHECK-LABEL: narrow_and_wide_use:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.zext256 v8, a0
-; CHECK-NEXT:    revive.zext256 v10, a1
-; CHECK-NEXT:    revive.add256 v8, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
+; CHECK-NEXT:    revive.wzext v10, a1
+; CHECK-NEXT:    revive.wadd v8, v8, v10
 ; CHECK-NEXT:    add a0, a0, a1
 ; CHECK-NEXT:    sd a0, 0(a2)
 ; CHECK-NEXT:    ret

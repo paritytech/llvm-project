@@ -51,6 +51,12 @@ STATISTIC(NumVRegSpilled,
 STATISTIC(NumVRegReloaded,
           "Number of registers within vector register groups reloaded");
 
+static cl::opt<bool> ReviveOutlineVTYPE(
+    "riscv-revive-outline-vtype", cl::Hidden, cl::init(false),
+    cl::desc("Allow the outliner to lift XReviveVec instructions that read vtype. Their width "
+             "then depends on the call site, which PolkaVM's linker cannot recover; this exists "
+             "to measure what the restriction costs."));
+
 static cl::opt<bool> PreferWholeRegisterMove(
     "riscv-prefer-whole-register-move", cl::init(false), cl::Hidden,
     cl::desc("Prefer whole register move for vector registers."));
@@ -381,19 +387,41 @@ static bool isConvertibleToVMV_V_V(const RISCVSubtarget &STI,
 }
 
 /// The extension's own register move for a chunk of `LMul` registers, standing in for `vmvNr.v`.
+/// It carries the count rather than reading `vtype`, because a copy is expanded after the vsetvli
+/// insertion has already run.
 static unsigned reviveWideMoveOpcode(RISCVVType::VLMUL LMul) {
   switch (LMul) {
   case RISCVVType::LMUL_8:
-    return RISCV::REVIVE_1024_MV;
+    return RISCV::REVIVE_MV8R;
   case RISCVVType::LMUL_4:
-    return RISCV::REVIVE_512_MV;
+    return RISCV::REVIVE_MV4R;
   case RISCVVType::LMUL_2:
-    return RISCV::REVIVE_256_MV;
+    return RISCV::REVIVE_MV2R;
   default:
-    return RISCV::REVIVE_128_MV;
+    return RISCV::REVIVE_MV1R;
   }
 }
 
+/// The extension's own wide access for a spill of `RC`, or zero when there is none.
+///
+/// PolkaVM implements no standard vector instruction, so a wide spill cannot go through
+/// `vsNr.v`/`vlNr.v`. These are pseudos, so the vsetvli insertion establishes the width for them --
+/// it runs after the vector register allocation that creates them, and so sees them.
+static unsigned reviveWideSpillOpcode(const TargetRegisterClass *RC, bool IsLoad) {
+  // Widest first: a register of a wider group is reachable through the narrower classes too.
+  if (RISCV::VRM8RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::PseudoREVIVE_W_LD_M8 : RISCV::PseudoREVIVE_W_ST_M8;
+  if (RISCV::VRM4RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::PseudoREVIVE_W_LD_M4 : RISCV::PseudoREVIVE_W_ST_M4;
+  if (RISCV::VRM2RegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::PseudoREVIVE_W_LD_M2 : RISCV::PseudoREVIVE_W_ST_M2;
+  if (RISCV::VRRegClass.hasSubClassEq(RC))
+    return IsLoad ? RISCV::PseudoREVIVE_W_LD_M1 : RISCV::PseudoREVIVE_W_ST_M1;
+  return 0;
+}
+
+/// SEW for the XReviveVec pseudos; nothing reads it, but a vtype has to name one.
+static constexpr int64_t ReviveLog2SEW = 6;
 
 void RISCVInstrInfo::copyPhysRegVector(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
@@ -471,9 +499,9 @@ void RISCVInstrInfo::copyPhysRegVector(
         GetCopyInfo(SrcEncoding, DstEncoding);
     auto [NumCopied, _] = RISCVVType::decodeVLMUL(LMulCopied);
 
-    // The loop above decides how many registers this chunk covers; taking the width from it is
-    // what keeps a wide copy whole. Substituting the opcode here rather than short-circuiting the
-    // loop is the difference between copying a 256-bit value and copying half of one.
+    // The loop above decides how many registers this chunk covers, and taking the width from it is
+    // what keeps a wide copy whole: short-circuiting the loop instead would copy only part of a
+    // value.
     bool IsWideMove = STI.hasVendorXReviveVec();
     MachineBasicBlock::const_iterator DefMBBI;
     if (IsWideMove) {
@@ -682,25 +710,6 @@ static bool useFixedRVVSlot(MachineFrameInfo &MFI, int FI,
   return true;
 }
 
-// The extension's own wide access for a spill of `RC`, or zero when there is none.
-//
-// PolkaVM implements no standard vector instruction, so a wide spill cannot go through
-// `vsNr.v`/`vlNr.v`; these carry the same bytes and are the extension's own. The width comes from
-// vtype, which the vsetvli insertion establishes -- it runs after the vector register allocation
-// that creates these, so it sees them.
-static unsigned reviveWideSpillOpcode(const TargetRegisterClass *RC, bool IsLoad) {
-  // Widest first: a register of a wider group is reachable through the narrower classes too.
-  if (RISCV::VRM8RegClass.hasSubClassEq(RC))
-    return IsLoad ? RISCV::REVIVE_1024_LD : RISCV::REVIVE_1024_ST;
-  if (RISCV::VRM4RegClass.hasSubClassEq(RC))
-    return IsLoad ? RISCV::REVIVE_512_LD : RISCV::REVIVE_512_ST;
-  if (RISCV::VRM2RegClass.hasSubClassEq(RC))
-    return IsLoad ? RISCV::REVIVE_256_LD : RISCV::REVIVE_256_ST;
-  if (RISCV::VRRegClass.hasSubClassEq(RC))
-    return IsLoad ? RISCV::REVIVE_128_LD : RISCV::REVIVE_128_ST;
-  return 0;
-}
-
 void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator I,
                                          Register SrcReg, bool IsKill, int FI,
@@ -711,6 +720,9 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   MachineFrameInfo &MFI = MF->getFrameInfo();
   Align Alignment = MFI.getObjectAlign(FI);
 
+  // A wide spill goes through the extension's own access, not `vsNr.v`/`vlNr.v`: PolkaVM
+  // implements no standard vector instruction. These are pseudos, so the vsetvli insertion
+  // establishes the width for them.
   if (STI.hasVendorXReviveVec()) {
     if (unsigned Wide = reviveWideSpillOpcode(RC, /*IsLoad=*/false)) {
       useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
@@ -721,6 +733,8 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
           .addReg(SrcReg, getKillRegState(IsKill))
           .addFrameIndex(FI)
           .addImm(0)
+          .addImm(RISCV::VLMaxSentinel)
+          .addImm(ReviveLog2SEW)
           .addMemOperand(MMO)
           .setMIFlag(Flags);
       return;
@@ -823,6 +837,9 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   DebugLoc DL =
       Flags & MachineInstr::FrameDestroy ? MBB.findDebugLoc(I) : DebugLoc();
 
+  // A wide spill goes through the extension's own access, not `vsNr.v`/`vlNr.v`: PolkaVM
+  // implements no standard vector instruction. These are pseudos, so the vsetvli insertion
+  // establishes the width for them.
   if (STI.hasVendorXReviveVec()) {
     if (unsigned Wide = reviveWideSpillOpcode(RC, /*IsLoad=*/true)) {
       useFixedRVVSlot(MFI, FI, RC, STI, RegInfo);
@@ -832,6 +849,8 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
       BuildMI(MBB, I, DL, get(Wide), DstReg)
           .addFrameIndex(FI)
           .addImm(0)
+          .addImm(RISCV::VLMaxSentinel)
+          .addImm(ReviveLog2SEW)
           .addMemOperand(MMO)
           .setMIFlag(Flags);
       return;
@@ -3873,6 +3892,15 @@ RISCVInstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
   }
 
   if (isLPAD(MI))
+    return outliner::InstrType::Illegal;
+
+  // XReviveVec reads a wide instruction's width from `vtype`, so an outlined sequence would be
+  // polymorphic in it. That executes correctly -- every call site gets the semantics its own
+  // configuration implies -- but it makes the width a property of the call site rather than of
+  // the instruction stream, and PolkaVM's linker has to recover it statically. Keep anything
+  // that reads or writes `vtype` where the configuration establishing it is visible.
+  if (STI.hasVendorXReviveVec() && !ReviveOutlineVTYPE &&
+      (MI.readsRegister(RISCV::VTYPE, TRI) || MI.modifiesRegister(RISCV::VTYPE, TRI)))
     return outliner::InstrType::Illegal;
 
   return outliner::InstrType::Legal;

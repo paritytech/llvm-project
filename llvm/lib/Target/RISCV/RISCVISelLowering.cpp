@@ -17681,16 +17681,16 @@ combineVectorSizedSetCCEquality(EVT VT, SDValue X, SDValue Y, ISD::CondCode CC,
   if (!Subtarget.hasVInstructions())
     return SDValue();
 
-  MVT XLenVT = Subtarget.getXLenVT();
-  EVT OpVT = X.getValueType();
-  // We're looking for an oversized integer equality comparison.
-  if (!OpVT.isScalarInteger())
-    return SDValue();
-
   // Not under XReviveVec. A comparison at a width it has a register class for is already one
   // instruction, and at any other width this would reach for standard vector instructions that
   // PolkaVM does not implement -- a `vsetvli`, a `vmsne.vv` and a `vcpop.m`.
   if (Subtarget.hasVendorXReviveVec())
+    return SDValue();
+
+  MVT XLenVT = Subtarget.getXLenVT();
+  EVT OpVT = X.getValueType();
+  // We're looking for an oversized integer equality comparison.
+  if (!OpVT.isScalarInteger())
     return SDValue();
 
   unsigned OpSize = OpVT.getSizeInBits();

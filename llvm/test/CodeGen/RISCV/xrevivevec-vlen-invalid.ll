@@ -22,7 +22,7 @@
 ; MAX: XReviveVec requires VLEN=128, but the vector length maximum is 512
 
 ; CHECK-LABEL: add256:
-; CHECK: revive.add256
+; CHECK: revive.wadd
 define i256 @add256(i256 %a, i256 %b) {
   %r = add i256 %a, %b
   ret i256 %r

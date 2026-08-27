@@ -16,20 +16,28 @@ define i256 @spill_no_vlenb(ptr %p) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 112
 ; CHECK-NEXT:    sd ra, 104(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    revive.ld256 v8, 0(a0)
-; CHECK-NEXT:    revive.ld256 v10, 0(a0)
-; CHECK-NEXT:    revive.st256 v10, 72(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.ld256 v10, 0(a0)
-; CHECK-NEXT:    revive.st256 v10, 40(sp) # 32-byte Folded Spill
-; CHECK-NEXT:    revive.ld256 v10, 0(a0)
-; CHECK-NEXT:    revive.st256 v10, 8(sp) # 32-byte Folded Spill
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wld v8, 0(a0)
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    addi a1, sp, 72
+; CHECK-NEXT:    revive.wst v10, 0(a1) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    addi a1, sp, 40
+; CHECK-NEXT:    revive.wst v10, 0(a1) # 32-byte Folded Spill
+; CHECK-NEXT:    revive.wld v10, 0(a0)
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    revive.wst v10, 0(a0) # 32-byte Folded Spill
 ; CHECK-NEXT:    call sink
-; CHECK-NEXT:    revive.ld256 v10, 72(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.add256 v8, v8, v10
-; CHECK-NEXT:    revive.ld256 v10, 40(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.add256 v8, v8, v10
-; CHECK-NEXT:    revive.ld256 v10, 8(sp) # 32-byte Folded Reload
-; CHECK-NEXT:    revive.add256 v8, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    addi a0, sp, 72
+; CHECK-NEXT:    revive.wld v10, 0(a0) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    addi a0, sp, 40
+; CHECK-NEXT:    revive.wld v10, 0(a0) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    revive.wld v10, 0(a0) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
 ; CHECK-NEXT:    ld ra, 104(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
 ; CHECK-NEXT:    addi sp, sp, 112

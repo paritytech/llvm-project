@@ -37,6 +37,12 @@ namespace llvm::RISCVTuneInfoTable {
 #include "RISCVGenSearchableTables.inc"
 } // namespace llvm::RISCVTuneInfoTable
 
+static cl::opt<bool> ReviveCallPreservedVType(
+    "riscv-revive-call-preserved-vtype", cl::Hidden, cl::init(false),
+    cl::desc("Assume a call leaves XReviveVec's `vtype` unchanged. Only sound if every callee that "
+             "reconfigures restores it; nothing does, since VTYPE is a reserved register and so is "
+             "never spilled as callee-saved. Off by default; exists to measure the cost."));
+
 static cl::opt<unsigned> RVVVectorLMULMax(
     "riscv-v-fixed-length-vector-lmul-max",
     cl::desc("The maximum LMUL value to use for fixed length vectors. "
@@ -208,10 +214,10 @@ unsigned RISCVSubtarget::getMaxLMULForFixedLengthVectors() const {
 }
 
 bool RISCVSubtarget::useRVVForFixedLengthVectors() const {
-  // XReviveVec holds wide integers in the vector registers and configures `vtype` to say how
-  // wide, so it needs the vector extensions present -- but it wants nothing else from them.
-  // Letting fixed-length vectors be legal hands the vectorizers and the memory intrinsics the
-  // whole RVV menu, of which PolkaVM implements none: a twenty byte copy came out as `vle8.v`.
+  // XReviveVec holds wide integers in the vector registers and configures `vtype` to say how wide,
+  // so it needs the vector extensions present -- but it wants nothing else from them. Letting
+  // fixed-length vectors be legal hands the vectorizers and the memory intrinsics the whole RVV
+  // menu, of which PolkaVM implements none: a twenty byte copy came out as `vle8.v`.
   if (hasVendorXReviveVec())
     return false;
 
@@ -272,4 +278,8 @@ bool RISCVSubtarget::useMIPSLoadStorePairs() const {
 
 bool RISCVSubtarget::useMIPSCCMovInsn() const {
   return UseMIPSCCMovInsn && HasVendorXMIPSCMov;
+}
+
+bool RISCVSubtarget::hasCallPreservedVType() const {
+  return hasVendorXReviveVec() && ReviveCallPreservedVType;
 }

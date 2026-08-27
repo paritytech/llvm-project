@@ -8,7 +8,8 @@
 define i512 @add_512(i512 %a, i512 %b) {
 ; CHECK-LABEL: add_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.add512 v8, v8, v12
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wadd v8, v8, v12
 ; CHECK-NEXT:    ret
   %r = add i512 %a, %b
   ret i512 %r
@@ -17,7 +18,8 @@ define i512 @add_512(i512 %a, i512 %b) {
 define i1024 @add_1024(i1024 %a, i1024 %b) {
 ; CHECK-LABEL: add_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.add1024 v8, v8, v16
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wadd v8, v8, v16
 ; CHECK-NEXT:    ret
   %r = add i1024 %a, %b
   ret i1024 %r
@@ -26,7 +28,8 @@ define i1024 @add_1024(i1024 %a, i1024 %b) {
 define i512 @mul_512(i512 %a, i512 %b) {
 ; CHECK-LABEL: mul_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.mul512 v8, v8, v12
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wmul v8, v8, v12
 ; CHECK-NEXT:    ret
   %r = mul i512 %a, %b
   ret i512 %r
@@ -35,7 +38,8 @@ define i512 @mul_512(i512 %a, i512 %b) {
 define i1024 @mul_1024(i1024 %a, i1024 %b) {
 ; CHECK-LABEL: mul_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.mul1024 v8, v8, v16
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wmul v8, v8, v16
 ; CHECK-NEXT:    ret
   %r = mul i1024 %a, %b
   ret i1024 %r
@@ -45,7 +49,8 @@ define i1024 @mul_1024(i1024 %a, i1024 %b) {
 define i512 @udiv_512(i512 %a, i512 %b) {
 ; CHECK-LABEL: udiv_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.divu512 v8, v8, v12
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wdivu v8, v8, v12
 ; CHECK-NEXT:    ret
   %r = udiv i512 %a, %b
   ret i512 %r
@@ -54,7 +59,8 @@ define i512 @udiv_512(i512 %a, i512 %b) {
 define i1024 @sdiv_1024(i1024 %a, i1024 %b) {
 ; CHECK-LABEL: sdiv_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.div1024 v8, v8, v16
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wdiv v8, v8, v16
 ; CHECK-NEXT:    ret
   %r = sdiv i1024 %a, %b
   ret i1024 %r
@@ -63,7 +69,8 @@ define i1024 @sdiv_1024(i1024 %a, i1024 %b) {
 define i512 @srem_512(i512 %a, i512 %b) {
 ; CHECK-LABEL: srem_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.rem512 v8, v8, v12
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wrem v8, v8, v12
 ; CHECK-NEXT:    ret
   %r = srem i512 %a, %b
   ret i512 %r
@@ -72,7 +79,8 @@ define i512 @srem_512(i512 %a, i512 %b) {
 define i1024 @urem_1024(i1024 %a, i1024 %b) {
 ; CHECK-LABEL: urem_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.remu1024 v8, v8, v16
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wremu v8, v8, v16
 ; CHECK-NEXT:    ret
   %r = urem i1024 %a, %b
   ret i1024 %r
@@ -81,7 +89,8 @@ define i1024 @urem_1024(i1024 %a, i1024 %b) {
 define i512 @shl_512(i512 %a, i64 %b) {
 ; CHECK-LABEL: shl_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sll512 v8, v8, a0
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wsll v8, v8, a0
 ; CHECK-NEXT:    ret
   %s = zext i64 %b to i512
   %r = shl i512 %a, %s
@@ -91,7 +100,8 @@ define i512 @shl_512(i512 %a, i64 %b) {
 define i1024 @ashr_1024(i1024 %a, i64 %b) {
 ; CHECK-LABEL: ashr_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sra1024 v8, v8, a0
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wsra v8, v8, a0
 ; CHECK-NEXT:    ret
   %s = zext i64 %b to i1024
   %r = ashr i1024 %a, %s
@@ -101,7 +111,8 @@ define i1024 @ashr_1024(i1024 %a, i64 %b) {
 define i64 @cmp_ult_512(i512 %a, i512 %b) {
 ; CHECK-LABEL: cmp_ult_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sltu512 a0, v8, v12
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wsltu a0, v8, v12
 ; CHECK-NEXT:    ret
   %c = icmp ult i512 %a, %b
   %r = zext i1 %c to i64
@@ -111,7 +122,8 @@ define i64 @cmp_ult_512(i512 %a, i512 %b) {
 define i64 @cmp_eq_1024(i1024 %a, i1024 %b) {
 ; CHECK-LABEL: cmp_eq_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.seq1024 a0, v8, v16
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wseq a0, v8, v16
 ; CHECK-NEXT:    ret
   %c = icmp eq i1024 %a, %b
   %r = zext i1 %c to i64
@@ -125,7 +137,7 @@ define i512 @select_512(i1 %c, i512 %a, i512 %b) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    bnez a0, .LBB12_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    revive.mv512 v8, v12
+; CHECK-NEXT:    revive.wmv4r v8, v12
 ; CHECK-NEXT:  .LBB12_2:
 ; CHECK-NEXT:    ret
   %r = select i1 %c, i512 %a, i512 %b
@@ -138,7 +150,7 @@ define i1024 @select_1024(i1 %c, i1024 %a, i1024 %b) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    bnez a0, .LBB13_2
 ; CHECK-NEXT:  # %bb.1:
-; CHECK-NEXT:    revive.mv1024 v8, v16
+; CHECK-NEXT:    revive.wmv8r v8, v16
 ; CHECK-NEXT:  .LBB13_2:
 ; CHECK-NEXT:    ret
   %r = select i1 %c, i1024 %a, i1024 %b
@@ -148,7 +160,8 @@ define i1024 @select_1024(i1 %c, i1024 %a, i1024 %b) {
 define i512 @load_512(ptr %p) {
 ; CHECK-LABEL: load_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.ld512 v8, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wld v8, 0(a0)
 ; CHECK-NEXT:    ret
   %r = load i512, ptr %p
   ret i512 %r
@@ -157,7 +170,8 @@ define i512 @load_512(ptr %p) {
 define void @store_1024(ptr %p, i1024 %v) {
 ; CHECK-LABEL: store_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.st1024 v8, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wst v8, 0(a0)
 ; CHECK-NEXT:    ret
   store i1024 %v, ptr %p
   ret void
@@ -166,7 +180,8 @@ define void @store_1024(ptr %p, i1024 %v) {
 define i512 @zext_512(i64 %a) {
 ; CHECK-LABEL: zext_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.zext512 v8, a0
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wzext v8, a0
 ; CHECK-NEXT:    ret
   %r = zext i64 %a to i512
   ret i512 %r
@@ -175,7 +190,8 @@ define i512 @zext_512(i64 %a) {
 define i1024 @sext_1024(i64 %a) {
 ; CHECK-LABEL: sext_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sext1024 v8, a0
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wsext v8, a0
 ; CHECK-NEXT:    ret
   %r = sext i64 %a to i1024
   ret i1024 %r
@@ -184,7 +200,8 @@ define i1024 @sext_1024(i64 %a) {
 define i64 @trunc_1024(i1024 %a) {
 ; CHECK-LABEL: trunc_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.trunc1024 a0, v8
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wtrunc a0, v8
 ; CHECK-NEXT:    ret
   %r = trunc i1024 %a to i64
   ret i64 %r
@@ -194,9 +211,10 @@ define i64 @trunc_1024(i1024 %a) {
 define i512 @zext_256_to_512(i256 %a) {
 ; CHECK-LABEL: zext_256_to_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.zext512 v12, zero
-; CHECK-NEXT:    revive.mv256 v12, v8
-; CHECK-NEXT:    revive.mv512 v8, v12
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wzext v12, zero
+; CHECK-NEXT:    revive.wmv2r v12, v8
+; CHECK-NEXT:    revive.wmv4r v8, v12
 ; CHECK-NEXT:    ret
   %r = zext i256 %a to i512
   ret i512 %r
@@ -213,7 +231,8 @@ define i256 @trunc_1024_to_256(i1024 %a) {
 define i512 @umax_512(i512 %a, i512 %b) {
 ; CHECK-LABEL: umax_512:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.maxu512 v8, v8, v12
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wmaxu v8, v8, v12
 ; CHECK-NEXT:    ret
   %c = icmp ugt i512 %a, %b
   %r = select i1 %c, i512 %a, i512 %b
@@ -223,7 +242,8 @@ define i512 @umax_512(i512 %a, i512 %b) {
 define i1024 @smin_1024(i1024 %a, i1024 %b) {
 ; CHECK-LABEL: smin_1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.min1024 v8, v8, v16
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wmin v8, v8, v16
 ; CHECK-NEXT:    ret
   %c = icmp slt i1024 %a, %b
   %r = select i1 %c, i1024 %a, i1024 %b

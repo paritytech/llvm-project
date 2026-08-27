@@ -14,7 +14,8 @@ declare i256 @llvm.bswap.i256(i256)
 define i256 @addmod(i256 %a, i256 %b, i256 %n) {
 ; CHECK-LABEL: addmod:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.addmod v8, v8, v10, v12
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.waddmod v8, v8, v10, v12
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.riscv.revive.addmod(i256 %a, i256 %b, i256 %n)
   ret i256 %r
@@ -23,7 +24,8 @@ define i256 @addmod(i256 %a, i256 %b, i256 %n) {
 define i256 @mulmod(i256 %a, i256 %b, i256 %n) {
 ; CHECK-LABEL: mulmod:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.mulmod v8, v8, v10, v12
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wmulmod v8, v8, v10, v12
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.riscv.revive.mulmod(i256 %a, i256 %b, i256 %n)
   ret i256 %r
@@ -32,7 +34,8 @@ define i256 @mulmod(i256 %a, i256 %b, i256 %n) {
 define i256 @exp(i256 %a, i256 %b) {
 ; CHECK-LABEL: exp:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.exp256 v8, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wexp v8, v8, v10
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.riscv.revive.exp(i256 %a, i256 %b)
   ret i256 %r
@@ -41,7 +44,8 @@ define i256 @exp(i256 %a, i256 %b) {
 define i256 @signextend(i256 %a, i256 %b) {
 ; CHECK-LABEL: signextend:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.signextend256 v8, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wsignextend v8, v8, v10
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.riscv.revive.signextend(i256 %a, i256 %b)
   ret i256 %r
@@ -51,7 +55,8 @@ define i256 @signextend(i256 %a, i256 %b) {
 define i256 @bswap(i256 %a) {
 ; CHECK-LABEL: bswap:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.bswap256 v8, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wbswap v8, v8
 ; CHECK-NEXT:    ret
   %r = call i256 @llvm.bswap.i256(i256 %a)
   ret i256 %r

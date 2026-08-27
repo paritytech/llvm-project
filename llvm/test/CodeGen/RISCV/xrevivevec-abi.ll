@@ -14,7 +14,7 @@ declare fastcc i256 @fast_sink(i256, i256)
 define i256 @arg_passthrough(i256 %a, i256 %b) {
 ; CHECK-LABEL: arg_passthrough:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.mv256 v8, v10
+; CHECK-NEXT:    revive.wmv2r v8, v10
 ; CHECK-NEXT:    ret
   ret i256 %b
 }
@@ -125,15 +125,16 @@ define i256 @call_ten(i256 %a) {
 ; CHECK-NEXT:    addi s0, sp, 96
 ; CHECK-NEXT:    .cfi_def_cfa s0, 0
 ; CHECK-NEXT:    andi sp, sp, -32
-; CHECK-NEXT:    revive.st256 v8, 32(sp)
-; CHECK-NEXT:    revive.st256 v8, 0(sp)
-; CHECK-NEXT:    revive.mv256 v10, v8
-; CHECK-NEXT:    revive.mv256 v12, v8
-; CHECK-NEXT:    revive.mv256 v14, v8
-; CHECK-NEXT:    revive.mv256 v16, v8
-; CHECK-NEXT:    revive.mv256 v18, v8
-; CHECK-NEXT:    revive.mv256 v20, v8
-; CHECK-NEXT:    revive.mv256 v22, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wst v8, 32(sp)
+; CHECK-NEXT:    revive.wst v8, 0(sp)
+; CHECK-NEXT:    revive.wmv2r v10, v8
+; CHECK-NEXT:    revive.wmv2r v12, v8
+; CHECK-NEXT:    revive.wmv2r v14, v8
+; CHECK-NEXT:    revive.wmv2r v16, v8
+; CHECK-NEXT:    revive.wmv2r v18, v8
+; CHECK-NEXT:    revive.wmv2r v20, v8
+; CHECK-NEXT:    revive.wmv2r v22, v8
 ; CHECK-NEXT:    call sink10
 ; CHECK-NEXT:    addi sp, s0, -96
 ; CHECK-NEXT:    .cfi_def_cfa sp, 96
@@ -151,37 +152,25 @@ define i256 @call_ten(i256 %a) {
 
 ; A value live across a call must survive it.
 define i256 @live_across_call(i256 %a, i256 %b) {
-; RV64I-LABEL: live_across_call:
-; RV64I:       # %bb.0:
-; RV64I-NEXT:    addi sp, sp, -48
-; RV64I-NEXT:    .cfi_def_cfa_offset 48
-; RV64I-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
-; RV64I-NEXT:    .cfi_offset ra, -8
-; RV64I-NEXT:    revive.st256 v8, 8(sp) # 32-byte Folded Spill
-; RV64I-NEXT:    call sink2
-; RV64I-NEXT:    revive.ld256 v10, 8(sp) # 32-byte Folded Reload
-; RV64I-NEXT:    revive.add256 v8, v8, v10
-; RV64I-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
-; RV64I-NEXT:    .cfi_restore ra
-; RV64I-NEXT:    addi sp, sp, 48
-; RV64I-NEXT:    .cfi_def_cfa_offset 0
-; RV64I-NEXT:    ret
-;
-; RV64E-LABEL: live_across_call:
-; RV64E:       # %bb.0:
-; RV64E-NEXT:    addi sp, sp, -40
-; RV64E-NEXT:    .cfi_def_cfa_offset 40
-; RV64E-NEXT:    sd ra, 32(sp) # 8-byte Folded Spill
-; RV64E-NEXT:    .cfi_offset ra, -8
-; RV64E-NEXT:    revive.st256 v8, 0(sp) # 32-byte Folded Spill
-; RV64E-NEXT:    call sink2
-; RV64E-NEXT:    revive.ld256 v10, 0(sp) # 32-byte Folded Reload
-; RV64E-NEXT:    revive.add256 v8, v8, v10
-; RV64E-NEXT:    ld ra, 32(sp) # 8-byte Folded Reload
-; RV64E-NEXT:    .cfi_restore ra
-; RV64E-NEXT:    addi sp, sp, 40
-; RV64E-NEXT:    .cfi_def_cfa_offset 0
-; RV64E-NEXT:    ret
+; CHECK-LABEL: live_across_call:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    addi sp, sp, -48
+; CHECK-NEXT:    .cfi_def_cfa_offset 48
+; CHECK-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    .cfi_offset ra, -8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    revive.wst v8, 0(a0) # 32-byte Folded Spill
+; CHECK-NEXT:    call sink2
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    revive.wld v10, 0(a0) # 32-byte Folded Reload
+; CHECK-NEXT:    revive.wadd v8, v8, v10
+; CHECK-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    .cfi_restore ra
+; CHECK-NEXT:    addi sp, sp, 48
+; CHECK-NEXT:    .cfi_def_cfa_offset 0
+; CHECK-NEXT:    ret
   %c = call i256 @sink2(i256 %a, i256 %b)
   %r = add i256 %c, %a
   ret i256 %r

@@ -9,8 +9,10 @@
 define void @i256_then_i1024(i256 %a, i1024 %b, ptr %p) {
 ; CHECK-LABEL: i256_then_i1024:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.st256 v8, 0(a0)
-; CHECK-NEXT:    revive.st1024 v16, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wst v8, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wst v16, 0(a0)
 ; CHECK-NEXT:    ret
   store volatile i256 %a, ptr %p
   store volatile i1024 %b, ptr %p
@@ -20,8 +22,10 @@ define void @i256_then_i1024(i256 %a, i1024 %b, ptr %p) {
 define void @i1024_then_i256(i1024 %a, i256 %b, ptr %p) {
 ; CHECK-LABEL: i1024_then_i256:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.st1024 v8, 0(a0)
-; CHECK-NEXT:    revive.st256 v16, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wst v8, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wst v16, 0(a0)
 ; CHECK-NEXT:    ret
   store volatile i1024 %a, ptr %p
   store volatile i256 %b, ptr %p
@@ -31,9 +35,12 @@ define void @i1024_then_i256(i1024 %a, i256 %b, ptr %p) {
 define void @all_three_widths(i1024 %a, i256 %b, i512 %c, ptr %p) {
 ; CHECK-LABEL: all_three_widths:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.st1024 v8, 0(a0)
-; CHECK-NEXT:    revive.st256 v16, 0(a0)
-; CHECK-NEXT:    revive.st512 v20, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wst v8, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wst v16, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wst v20, 0(a0)
 ; CHECK-NEXT:    ret
   store volatile i1024 %a, ptr %p
   store volatile i256 %b, ptr %p
@@ -54,9 +61,10 @@ define void @i256_exhaust(i256 %a, i256 %b, i256 %c, i256 %d, i256 %e, i256 %f,
 ; CHECK-NEXT:    addi s0, sp, 32
 ; CHECK-NEXT:    .cfi_def_cfa s0, 0
 ; CHECK-NEXT:    andi sp, sp, -32
-; CHECK-NEXT:    revive.ld256 v10, 0(s0)
-; CHECK-NEXT:    revive.st256 v8, 0(a0)
-; CHECK-NEXT:    revive.st256 v10, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wld v10, 0(s0)
+; CHECK-NEXT:    revive.wst v8, 0(a0)
+; CHECK-NEXT:    revive.wst v10, 0(a0)
 ; CHECK-NEXT:    addi sp, s0, -32
 ; CHECK-NEXT:    .cfi_def_cfa sp, 32
 ; CHECK-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
@@ -85,9 +93,10 @@ define void @i1024_exhaust(i1024 %a, i1024 %b, i1024 %c, ptr %p) {
 ; CHECK-NEXT:    addi s0, sp, 32
 ; CHECK-NEXT:    .cfi_def_cfa s0, 0
 ; CHECK-NEXT:    andi sp, sp, -32
-; CHECK-NEXT:    revive.ld1024 v16, 0(s0)
-; CHECK-NEXT:    revive.st1024 v8, 0(a0)
-; CHECK-NEXT:    revive.st1024 v16, 0(a0)
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    revive.wld v16, 0(s0)
+; CHECK-NEXT:    revive.wst v8, 0(a0)
+; CHECK-NEXT:    revive.wst v16, 0(a0)
 ; CHECK-NEXT:    addi sp, s0, -32
 ; CHECK-NEXT:    .cfi_def_cfa sp, 32
 ; CHECK-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
@@ -112,9 +121,9 @@ define i512 @call_512(i512 %a, i512 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    revive.mv512 v16, v8
-; CHECK-NEXT:    revive.mv512 v8, v12
-; CHECK-NEXT:    revive.mv512 v12, v16
+; CHECK-NEXT:    revive.wmv4r v16, v8
+; CHECK-NEXT:    revive.wmv4r v8, v12
+; CHECK-NEXT:    revive.wmv4r v12, v16
 ; CHECK-NEXT:    call callee512
 ; CHECK-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
@@ -134,9 +143,9 @@ define i1024 @call_1024(i1024 %a, i1024 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    revive.mv1024 v24, v8
-; CHECK-NEXT:    revive.mv1024 v8, v16
-; CHECK-NEXT:    revive.mv1024 v16, v24
+; CHECK-NEXT:    revive.wmv8r v24, v8
+; CHECK-NEXT:    revive.wmv8r v8, v16
+; CHECK-NEXT:    revive.wmv8r v16, v24
 ; CHECK-NEXT:    call callee1024
 ; CHECK-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
@@ -152,7 +161,8 @@ define void @wide_and_gpr(i64 %x, i512 %a, i64 %y, ptr %p) {
 ; CHECK-LABEL: wide_and_gpr:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    sd a0, 0(a2)
-; CHECK-NEXT:    revive.st512 v8, 0(a2)
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    revive.wst v8, 0(a2)
 ; CHECK-NEXT:    sd a1, 0(a2)
 ; CHECK-NEXT:    ret
   store volatile i64 %x, ptr %p
@@ -171,9 +181,13 @@ define i1024 @spill_1024(i1024 %a) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 144
 ; CHECK-NEXT:    sd ra, 136(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    revive.st1024 v8, 8(sp) # 128-byte Folded Spill
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    revive.wst v8, 0(a0) # 128-byte Folded Spill
 ; CHECK-NEXT:    call clobber
-; CHECK-NEXT:    revive.ld1024 v8, 8(sp) # 128-byte Folded Reload
+; CHECK-NEXT:    vsetivli zero, 16, e64, m8, ta, ma
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    revive.wld v8, 0(a0) # 128-byte Folded Reload
 ; CHECK-NEXT:    ld ra, 136(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
 ; CHECK-NEXT:    addi sp, sp, 144
@@ -190,9 +204,13 @@ define i512 @spill_512(i512 %a) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 80
 ; CHECK-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
-; CHECK-NEXT:    revive.st512 v8, 8(sp) # 64-byte Folded Spill
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    revive.wst v8, 0(a0) # 64-byte Folded Spill
 ; CHECK-NEXT:    call clobber
-; CHECK-NEXT:    revive.ld512 v8, 8(sp) # 64-byte Folded Reload
+; CHECK-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
+; CHECK-NEXT:    addi a0, sp, 8
+; CHECK-NEXT:    revive.wld v8, 0(a0) # 64-byte Folded Reload
 ; CHECK-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
 ; CHECK-NEXT:    addi sp, sp, 80

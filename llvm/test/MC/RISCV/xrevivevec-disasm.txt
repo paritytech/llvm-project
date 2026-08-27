@@ -1,376 +1,103 @@
 # RUN: llvm-mc -triple=riscv64 -mattr=+xrevivevec -disassemble %s \
 # RUN:     | FileCheck %s
-# Not wrapped in `not`: decoding an unknown encoding is a warning, and llvm-mc still exits zero,
-# so requiring failure here would pass for the wrong reason.
+# Not wrapped in `not`: decoding an unknown encoding is a warning, and llvm-mc
+# still exits zero, so requiring failure here would pass for the wrong reason.
 # RUN: llvm-mc -triple=riscv64 -disassemble %s 2>&1 \
 # RUN:     | FileCheck %s --check-prefix=NO-EXT
 
-# The decoder driven from raw bytes, so a change breaking only one direction of the round trip is
-# still caught.
+# The decoder driven from raw bytes, so a change breaking only one direction of
+# the round trip is still caught.
 
-# CHECK: revive.add128	v8, v10, v12
+# CHECK: revive.wadd	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x00
-# CHECK: revive.sub128	v8, v10, v12
+# CHECK: revive.wsub	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x02
-# CHECK: revive.mul128	v8, v10, v12
+# CHECK: revive.wmul	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x04
-# CHECK: revive.and128	v8, v10, v12
+# CHECK: revive.wand	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x06
-# CHECK: revive.or128	v8, v10, v12
+# CHECK: revive.wor	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x08
-# CHECK: revive.xor128	v8, v10, v12
+# CHECK: revive.wxor	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x0a
-# CHECK: revive.divu128	v8, v10, v12
+# CHECK: revive.wdivu	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x0c
-# CHECK: revive.div128	v8, v10, v12
+# CHECK: revive.wdiv	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x0e
-# CHECK: revive.remu128	v8, v10, v12
+# CHECK: revive.wremu	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x10
-# CHECK: revive.rem128	v8, v10, v12
+# CHECK: revive.wrem	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x12
-# CHECK: revive.exp128	v8, v10, v12
+# CHECK: revive.wexp	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x14
-# CHECK: revive.signextend128	v8, v10, v12
+# CHECK: revive.wsignextend	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x16
-# CHECK: revive.minu128	v8, v10, v12
+# CHECK: revive.wminu	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x18
-# CHECK: revive.min128	v8, v10, v12
+# CHECK: revive.wmin	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x1a
-# CHECK: revive.maxu128	v8, v10, v12
+# CHECK: revive.wmaxu	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x1c
-# CHECK: revive.max128	v8, v10, v12
+# CHECK: revive.wmax	v8, v10, v12
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x04,0xc5,0x1e
-# CHECK: revive.sll128	v8, v10, a0
+# CHECK: revive.wsll	v8, v10, a0
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa5,0x20
-# CHECK: revive.srl128	v8, v10, a0
+0x5b,0x24,0xa5,0x00
+# CHECK: revive.wsrl	v8, v10, a0
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa5,0x22
-# CHECK: revive.sra128	v8, v10, a0
+0x5b,0x24,0xa5,0x02
+# CHECK: revive.wsra	v8, v10, a0
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa5,0x24
-# CHECK: revive.seq128	a0, v10, v12
+0x5b,0x24,0xa5,0x04
+# CHECK: revive.wseq	a0, v10, v12
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0xc5,0x26
-# CHECK: revive.sne128	a0, v10, v12
+0x5b,0x15,0xc5,0x00
+# CHECK: revive.wsne	a0, v10, v12
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0xc5,0x28
-# CHECK: revive.sltu128	a0, v10, v12
+0x5b,0x15,0xc5,0x02
+# CHECK: revive.wsltu	a0, v10, v12
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0xc5,0x2a
-# CHECK: revive.slt128	a0, v10, v12
+0x5b,0x15,0xc5,0x04
+# CHECK: revive.wslt	a0, v10, v12
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0xc5,0x2c
-# CHECK: revive.trunc128	a0, v10
+0x5b,0x15,0xc5,0x06
+# CHECK: revive.wtrunc	a0, v10
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x05,0x2e
-# CHECK: revive.zext128	v8, a0
+0x5b,0x65,0x05,0x02
+# CHECK: revive.wzext	v8, a0
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0x30
-# CHECK: revive.sext128	v8, a0
+0x5b,0x74,0x05,0x00
+# CHECK: revive.wsext	v8, a0
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0x32
-# CHECK: revive.bswap128	v8, v10
+0x5b,0x74,0x05,0x02
+# CHECK: revive.wbswap	v8, v10
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0x34
-# CHECK: revive.mv128	v8, v10
+0x5b,0x64,0x05,0x04
+# CHECK: revive.waddmod	v8, v10, v12, v14
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0x36
-# CHECK: revive.ld128	v8, 16(a0)
+0x5b,0x34,0xc5,0x70
+# CHECK: revive.wmulmod	v8, v10, v12, v14
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x24,0x05,0x01
-# CHECK: revive.st128	v8, 16(a0)
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x68,0x85,0x00
-# CHECK: revive.add256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x40
-# CHECK: revive.sub256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x42
-# CHECK: revive.mul256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x44
-# CHECK: revive.and256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x46
-# CHECK: revive.or256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x48
-# CHECK: revive.xor256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x4a
-# CHECK: revive.divu256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x4c
-# CHECK: revive.div256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x4e
-# CHECK: revive.remu256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x50
-# CHECK: revive.rem256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x52
-# CHECK: revive.exp256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x54
-# CHECK: revive.signextend256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x56
-# CHECK: revive.minu256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x58
-# CHECK: revive.min256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x5a
-# CHECK: revive.maxu256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x5c
-# CHECK: revive.max256	v8, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xc5,0x5e
-# CHECK: revive.sll256	v8, v10, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa5,0x60
-# CHECK: revive.srl256	v8, v10, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa5,0x62
-# CHECK: revive.sra256	v8, v10, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa5,0x64
-# CHECK: revive.seq256	a0, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0xc5,0x66
-# CHECK: revive.sne256	a0, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0xc5,0x68
-# CHECK: revive.sltu256	a0, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0xc5,0x6a
-# CHECK: revive.slt256	a0, v10, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0xc5,0x6c
-# CHECK: revive.trunc256	a0, v10
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x05,0x6e
-# CHECK: revive.zext256	v8, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0x70
-# CHECK: revive.sext256	v8, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0x72
-# CHECK: revive.bswap256	v8, v10
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0x74
-# CHECK: revive.mv256	v8, v10
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0x76
-# CHECK: revive.ld256	v8, 16(a0)
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x34,0x05,0x01
-# CHECK: revive.st256	v8, 16(a0)
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x68,0x85,0x40
-# CHECK: revive.add512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x81
-# CHECK: revive.sub512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x83
-# CHECK: revive.mul512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x85
-# CHECK: revive.and512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x87
-# CHECK: revive.or512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x89
-# CHECK: revive.xor512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x8b
-# CHECK: revive.divu512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x8d
-# CHECK: revive.div512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x8f
-# CHECK: revive.remu512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x91
-# CHECK: revive.rem512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x93
-# CHECK: revive.exp512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x95
-# CHECK: revive.signextend512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x97
-# CHECK: revive.minu512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x99
-# CHECK: revive.min512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x9b
-# CHECK: revive.maxu512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x9d
-# CHECK: revive.max512	v8, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0x9f
-# CHECK: revive.sll512	v8, v12, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa6,0xa0
-# CHECK: revive.srl512	v8, v12, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa6,0xa2
-# CHECK: revive.sra512	v8, v12, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa6,0xa4
-# CHECK: revive.seq512	a0, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x06,0xa7
-# CHECK: revive.sne512	a0, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x06,0xa9
-# CHECK: revive.sltu512	a0, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x06,0xab
-# CHECK: revive.slt512	a0, v12, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x06,0xad
-# CHECK: revive.trunc512	a0, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x06,0xae
-# CHECK: revive.zext512	v8, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0xb0
-# CHECK: revive.sext512	v8, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0xb2
-# CHECK: revive.bswap512	v8, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0xb4
-# CHECK: revive.mv512	v8, v12
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x06,0xb6
-# CHECK: revive.ld512	v8, 16(a0)
+0x5b,0x34,0xc5,0x72
+# CHECK: revive.wld	v8, 16(a0)
 # NO-EXT: warning: invalid instruction encoding
 0x5b,0x44,0x05,0x01
-# CHECK: revive.st512	v8, 16(a0)
+# CHECK: revive.wst	v8, 16(a0)
 # NO-EXT: warning: invalid instruction encoding
-0x5b,0x68,0x85,0x80
-# CHECK: revive.add1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xc0
-# CHECK: revive.sub1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xc2
-# CHECK: revive.mul1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xc4
-# CHECK: revive.and1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xc6
-# CHECK: revive.or1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xc8
-# CHECK: revive.xor1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xca
-# CHECK: revive.divu1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xcc
-# CHECK: revive.div1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xce
-# CHECK: revive.remu1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xd0
-# CHECK: revive.rem1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xd2
-# CHECK: revive.exp1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xd4
-# CHECK: revive.signextend1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xd6
-# CHECK: revive.minu1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xd8
-# CHECK: revive.min1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xda
-# CHECK: revive.maxu1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xdc
-# CHECK: revive.max1024	v8, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xde
-# CHECK: revive.sll1024	v8, v16, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa8,0xe0
-# CHECK: revive.srl1024	v8, v16, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa8,0xe2
-# CHECK: revive.sra1024	v8, v16, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0xa8,0xe4
-# CHECK: revive.seq1024	a0, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x08,0xe6
-# CHECK: revive.sne1024	a0, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x08,0xe8
-# CHECK: revive.sltu1024	a0, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x08,0xea
-# CHECK: revive.slt1024	a0, v16, v0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x08,0xec
-# CHECK: revive.trunc1024	a0, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x05,0x08,0xee
-# CHECK: revive.zext1024	v8, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0xf0
-# CHECK: revive.sext1024	v8, a0
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x05,0xf2
-# CHECK: revive.bswap1024	v8, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xf4
-# CHECK: revive.mv1024	v8, v16
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x04,0x08,0xf6
-# CHECK: revive.ld1024	v8, 16(a0)
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x54,0x05,0x01
-# CHECK: revive.st1024	v8, 16(a0)
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x68,0x85,0xc0
-# CHECK: revive.addmod	v8, v10, v12, v14
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x14,0xc5,0x70
-# CHECK: revive.mulmod	v8, v10, v12, v14
-# NO-EXT: warning: invalid instruction encoding
-0x5b,0x14,0xc5,0x72
+0x5b,0x58,0x85,0x00

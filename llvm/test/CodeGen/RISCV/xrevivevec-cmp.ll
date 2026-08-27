@@ -8,7 +8,8 @@
 define i64 @cmp_eq(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_eq:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.seq256 a0, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wseq a0, v8, v10
 ; CHECK-NEXT:    ret
   %c = icmp eq i256 %a, %b
   %z = zext i1 %c to i64
@@ -18,7 +19,8 @@ define i64 @cmp_eq(i256 %a, i256 %b) {
 define i64 @cmp_ne(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_ne:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sne256 a0, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wsne a0, v8, v10
 ; CHECK-NEXT:    ret
   %c = icmp ne i256 %a, %b
   %z = zext i1 %c to i64
@@ -28,7 +30,8 @@ define i64 @cmp_ne(i256 %a, i256 %b) {
 define i64 @cmp_ult(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_ult:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sltu256 a0, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wsltu a0, v8, v10
 ; CHECK-NEXT:    ret
   %c = icmp ult i256 %a, %b
   %z = zext i1 %c to i64
@@ -38,7 +41,8 @@ define i64 @cmp_ult(i256 %a, i256 %b) {
 define i64 @cmp_ule(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_ule:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sltu256 a0, v10, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wsltu a0, v10, v8
 ; CHECK-NEXT:    xori a0, a0, 1
 ; CHECK-NEXT:    ret
   %c = icmp ule i256 %a, %b
@@ -49,7 +53,8 @@ define i64 @cmp_ule(i256 %a, i256 %b) {
 define i64 @cmp_ugt(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_ugt:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sltu256 a0, v10, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wsltu a0, v10, v8
 ; CHECK-NEXT:    ret
   %c = icmp ugt i256 %a, %b
   %z = zext i1 %c to i64
@@ -59,7 +64,8 @@ define i64 @cmp_ugt(i256 %a, i256 %b) {
 define i64 @cmp_uge(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_uge:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sltu256 a0, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wsltu a0, v8, v10
 ; CHECK-NEXT:    xori a0, a0, 1
 ; CHECK-NEXT:    ret
   %c = icmp uge i256 %a, %b
@@ -70,7 +76,8 @@ define i64 @cmp_uge(i256 %a, i256 %b) {
 define i64 @cmp_slt(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_slt:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.slt256 a0, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wslt a0, v8, v10
 ; CHECK-NEXT:    ret
   %c = icmp slt i256 %a, %b
   %z = zext i1 %c to i64
@@ -80,7 +87,8 @@ define i64 @cmp_slt(i256 %a, i256 %b) {
 define i64 @cmp_sle(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_sle:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.slt256 a0, v10, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wslt a0, v10, v8
 ; CHECK-NEXT:    xori a0, a0, 1
 ; CHECK-NEXT:    ret
   %c = icmp sle i256 %a, %b
@@ -91,7 +99,8 @@ define i64 @cmp_sle(i256 %a, i256 %b) {
 define i64 @cmp_sgt(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_sgt:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.slt256 a0, v10, v8
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wslt a0, v10, v8
 ; CHECK-NEXT:    ret
   %c = icmp sgt i256 %a, %b
   %z = zext i1 %c to i64
@@ -101,7 +110,8 @@ define i64 @cmp_sgt(i256 %a, i256 %b) {
 define i64 @cmp_sge(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_sge:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.slt256 a0, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wslt a0, v8, v10
 ; CHECK-NEXT:    xori a0, a0, 1
 ; CHECK-NEXT:    ret
   %c = icmp sge i256 %a, %b
@@ -112,7 +122,8 @@ define i64 @cmp_sge(i256 %a, i256 %b) {
 define i64 @cmp_branch(i256 %a, i256 %b) {
 ; CHECK-LABEL: cmp_branch:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    revive.sltu256 a0, v8, v10
+; CHECK-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
+; CHECK-NEXT:    revive.wsltu a0, v8, v10
 ; CHECK-NEXT:    beqz a0, .LBB10_2
 ; CHECK-NEXT:  # %bb.1: # %t
 ; CHECK-NEXT:    li a0, 1

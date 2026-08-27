@@ -315,7 +315,7 @@ static VSETVLIInfo adjustIncoming(const VSETVLIInfo &PrevInfo,
 void RISCVInsertVSETVLI::transferBefore(VSETVLIInfo &Info,
                                         const MachineInstr &MI) const {
   // A vector copy needs a valid `vtype` because `vmvNr.v` reads it. Under XReviveVec a copy
-  // becomes `revive.mvN`, which carries the number of registers it moves and reads no vtype, so
+  // becomes `revive.wmvNr`, which carries the number of registers it moves and reads no vtype, so
   // there is nothing here to configure for.
   if (!ST->hasVendorXReviveVec() && RISCV::isVectorCopy(ST->getRegisterInfo(), MI) &&
       (Info.isUnknown() || !Info.isValid() || Info.hasSEWLMULRatioOnly())) {
@@ -405,7 +405,7 @@ void RISCVInsertVSETVLI::transferAfter(VSETVLIInfo &Info,
 
   // If this is something that updates VL/VTYPE that we don't know about, set
   // the state to unknown.
-  if (MI.isCall() || MI.isInlineAsm() ||
+  if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
       MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
       MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
     Info = VSETVLIInfo::getUnknown();
@@ -440,12 +440,6 @@ void RISCVInsertVSETVLI::computeIncomingVLVTYPE(const MachineBasicBlock &MBB) {
   // Start with the previous entry so that we keep the most conservative state
   // we have ever found.
   VSETVLIInfo InInfo = BBInfo.Pred;
-
-  // XReviveVec takes the width of its instructions from vtype, and the linker that turns them
-  // into PolkaVM instructions has to know that width statically. It walks the code in address
-  // order, which cannot see a configuration that reaches a block along an edge -- so every block
-  // establishes its own. Only sharing across blocks is given up; within one the state still
-  // elides as usual.
   if (MBB.pred_empty()) {
     // There are no predecessors, so use the default starting status.
     InInfo.setUnknown();
@@ -558,8 +552,6 @@ void RISCVInsertVSETVLI::emitVSETVLIs(MachineBasicBlock &MBB) {
       PrefixTransparent = false;
     }
 
-    // Not under XReviveVec: its move carries the number of registers it copies and reads no
-    // vtype at all, so a configuration ahead of one would be dead.
     if (EnsureWholeVectorRegisterMoveValidVTYPE && !ST->hasVendorXReviveVec() &&
         RISCV::isVectorCopy(ST->getRegisterInfo(), MI)) {
       if (!PrevInfo.isCompatible(DemandedFields::all(), CurInfo, LIS)) {
@@ -631,7 +623,7 @@ void RISCVInsertVSETVLI::emitVSETVLIs(MachineBasicBlock &MBB) {
                                               /*isImp*/ true));
     }
 
-    if (MI.isCall() || MI.isInlineAsm() ||
+    if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
         MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
         MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
       PrefixTransparent = false;
@@ -832,7 +824,7 @@ void RISCVInsertVSETVLI::coalesceVSETVLIs(MachineBasicBlock &MBB) const {
 
     if (!RISCVInstrInfo::isVectorConfigInstr(MI)) {
       Used.doUnion(getDemanded(MI, ST));
-      if (MI.isCall() || MI.isInlineAsm() ||
+      if ((MI.isCall() && !ST->hasCallPreservedVType()) || MI.isInlineAsm() ||
           MI.modifiesRegister(RISCV::VL, /*TRI=*/nullptr) ||
           MI.modifiesRegister(RISCV::VTYPE, /*TRI=*/nullptr))
         NextMI = nullptr;
@@ -1018,11 +1010,6 @@ bool RISCVInsertVSETVLI::runOnMachineFunction(MachineFunction &MF) {
   auto *LISWrapper = getAnalysisIfAvailable<LiveIntervalsWrapperPass>();
   LIS = LISWrapper ? &LISWrapper->getLIS() : nullptr;
   VIA = RISCVVSETVLIInfoAnalysis(ST, LIS);
-
-  // A function using one width throughout lets the linker read the width off the code in address
-  // order, so the configuration can be shared across blocks as usual. One that mixes widths
-  // cannot: a block reached along an edge would inherit a configuration the linker never sees. So
-  // there, and only there, every block establishes its own.
 
   assert(BlockInfo.empty() && "Expect empty block infos");
   BlockInfo.resize(MF.getNumBlockIDs());
