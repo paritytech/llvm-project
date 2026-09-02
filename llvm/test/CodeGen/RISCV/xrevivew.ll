@@ -132,8 +132,9 @@ define i64 @trunc_i256(i256 %a) {
 }
 
 ; A register-to-register move (from the loop-carried value) uses the wide move.
+; It must be wmv2r (256-bit); wmv1r would drop the high 128 bits of the i256.
 ; CHECK-LABEL: move_i256:
-; CHECK:       revive.wmv1r
+; CHECK:       revive.wmv2r
 define i256 @move_i256(i256 %a, i64 %n) {
 entry:
   br label %loop

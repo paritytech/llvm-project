@@ -76,10 +76,11 @@ def REVIVEW_BSWAP : WReviveUnary<0b0000010, "revive.wbswap">;
 def REVIVEW_ADDMOD : WReviveR4<0b00, "revive.waddmod">;
 def REVIVEW_MULMOD : WReviveR4<0b01, "revive.wmulmod">;
 
-// A whole-register move: one W register. funct7 count bits are 0b00 (one 256-bit
-// register). Used by copyPhysReg.
-def REVIVEW_MV : RVInstR<{0b00, 0b00000}, 0b110, OPC_CUSTOM_2,
-                         (outs WR:$rd), (ins WR:$rs1), "revive.wmv1r", "$rd, $rs1"> {
+// A whole-register move of one 256-bit W value. i256 spans two 128-bit slots, so
+// the move count in funct7 must be 0b01 (wmv2r / lmul 1 = 256 bits); 0b00 (wmv1r)
+// would copy only the low 128 bits and drop the high half. Used by copyPhysReg.
+def REVIVEW_MV : RVInstR<{0b01, 0b00000}, 0b110, OPC_CUSTOM_2,
+                         (outs WR:$rd), (ins WR:$rs1), "revive.wmv2r", "$rd, $rs1"> {
   let rs2 = 0;
 }
 } // hasSideEffects = 0, mayLoad = 0, mayStore = 0
