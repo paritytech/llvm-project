@@ -567,6 +567,13 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     return;
   }
 
+  // Prototype XReviveW: a dedicated-file 256-bit register copy.
+  if (RISCV::WRRegClass.contains(DstReg, SrcReg)) {
+    BuildMI(MBB, MBBI, DL, get(RISCV::REVIVEW_MV), DstReg)
+        .addReg(SrcReg, KillFlag | getRenamableRegState(RenamableSrc));
+    return;
+  }
+
   if (RISCV::GPRF16RegClass.contains(DstReg, SrcReg)) {
     BuildMI(MBB, MBBI, DL, get(RISCV::PseudoMV_FPR16INX), DstReg)
         .addReg(SrcReg, KillFlag | getRenamableRegState(RenamableSrc));
@@ -792,6 +799,8 @@ void RISCVInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
     Opcode = RISCV::PseudoVSPILL7_M1;
   else if (RISCV::VRN8M1RegClass.hasSubClassEq(RC))
     Opcode = RISCV::PseudoVSPILL8_M1;
+  else if (RISCV::WRRegClass.hasSubClassEq(RC))
+    Opcode = RISCV::REVIVEW_ST; // prototype: plain 256-bit store, no vtype
   else
     llvm_unreachable("Can't store this register to stack slot");
 
@@ -908,6 +917,8 @@ void RISCVInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     Opcode = RISCV::PseudoVRELOAD7_M1;
   else if (RISCV::VRN8M1RegClass.hasSubClassEq(RC))
     Opcode = RISCV::PseudoVRELOAD8_M1;
+  else if (RISCV::WRRegClass.hasSubClassEq(RC))
+    Opcode = RISCV::REVIVEW_LD; // prototype: plain 256-bit load, no vtype
   else
     llvm_unreachable("Can't load this register from stack slot");
 

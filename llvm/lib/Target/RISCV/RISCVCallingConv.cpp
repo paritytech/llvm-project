@@ -486,6 +486,20 @@ bool llvm::CC_RISCV(unsigned ValNo, MVT ValVT, MVT LocVT,
   // path, which owns the pending-location bookkeeping.
   if ((LocVT == MVT::i256 || LocVT == MVT::i512 || LocVT == MVT::i1024) &&
       !ArgFlags.isSplit() && PendingLocs.empty()) {
+    // Prototype: under XReviveW the same i256 lives in the dedicated W file.
+    if (State.getMachineFunction()
+            .getSubtarget<RISCVSubtarget>()
+            .hasVendorXReviveW()) {
+      static const MCPhysReg ArgWRs[] = {RISCV::W0, RISCV::W1, RISCV::W2, RISCV::W3,
+                                         RISCV::W4, RISCV::W5, RISCV::W6, RISCV::W7};
+      if (MCRegister Reg = State.AllocateReg(ArgWRs)) {
+        State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+        return false;
+      }
+      unsigned Offset = State.AllocateStack(32, Align(32));
+      State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
+      return false;
+    }
     ArrayRef<MCPhysReg> Regs = LocVT == MVT::i256   ? ArrayRef(ArgVRM2s)
                                : LocVT == MVT::i512 ? ArrayRef(ArgVRM4s)
                                                     : ArrayRef(ArgVRM8s);
@@ -650,6 +664,18 @@ bool llvm::CC_RISCV_FastCC(unsigned ValNo, MVT ValVT, MVT LocVT,
   // arguments actually take this path.
   if ((LocVT == MVT::i256 || LocVT == MVT::i512 || LocVT == MVT::i1024) &&
       !ArgFlags.isSplit()) {
+    // Prototype XReviveW: i256 in the dedicated W file.
+    if (Subtarget.hasVendorXReviveW()) {
+      static const MCPhysReg ArgWRs[] = {RISCV::W0, RISCV::W1, RISCV::W2, RISCV::W3,
+                                         RISCV::W4, RISCV::W5, RISCV::W6, RISCV::W7};
+      if (MCRegister Reg = State.AllocateReg(ArgWRs)) {
+        State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+        return false;
+      }
+      unsigned Offset = State.AllocateStack(32, Align(32));
+      State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
+      return false;
+    }
     ArrayRef<MCPhysReg> Regs = LocVT == MVT::i256   ? ArrayRef(ArgVRM2s)
                                : LocVT == MVT::i512 ? ArrayRef(ArgVRM4s)
                                                     : ArrayRef(ArgVRM8s);

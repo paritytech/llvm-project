@@ -896,6 +896,22 @@ def : RISCVRegisterClass<[XLenVT], 32, (add SF_VCIX_STATE)> {
 }
 
 //===----------------------------------------------------------------------===//
+// XReviveW: a dedicated 16-entry 256-bit register file (prototype)
+//===----------------------------------------------------------------------===//
+// W0-W15 are their own physical registers, not reused RVV groups. Their 5-bit
+// encodings are the even values 0,2,...,30 so the custom-2 register fields decode
+// to exactly the wide-register indices the PolkaVM linker already expects from the
+// VRM2 groups -- no linker-side register change. 256-bit; spilled as a 32-byte slot.
+foreach Index = 0-15 in
+  def W#Index : RISCVReg<!mul(Index, 2), "w"#Index>;
+
+def WRRI : RegInfoByHwMode<[RV32, RV64],
+                           [RegInfo<256, 256, 64>, RegInfo<256, 256, 64>]>;
+def WR : RISCVRegisterClass<[i256], 64, (add (sequence "W%u", 0, 15))> {
+  let RegInfos = WRRI;
+}
+
+//===----------------------------------------------------------------------===//
 // XSfmmbase tiles
 //===----------------------------------------------------------------------===//
 foreach Index = 0-15 in

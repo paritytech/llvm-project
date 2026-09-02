@@ -167,6 +167,9 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::i256, &RISCV::VRM2RegClass);
     addRegisterClass(MVT::i512, &RISCV::VRM4RegClass);
     addRegisterClass(MVT::i1024, &RISCV::VRM8RegClass);
+  } else if (Subtarget.hasVendorXReviveW()) {
+    // Prototype: i256 only, in the dedicated W0-W15 file.
+    addRegisterClass(MVT::i256, &RISCV::WRRegClass);
   }
 
   static const MVT::SimpleValueType BoolVecVTs[] = {
@@ -328,9 +331,16 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   // TODO: add all necessary setOperationAction calls.
   setOperationAction(ISD::DYNAMIC_STACKALLOC, XLenVT, Custom);
 
-  if (Subtarget.hasVendorXReviveVec()) {
-   for (MVT WideVT : {MVT::i256, MVT::i512, MVT::i1024}) {
-    // One instruction each; see RISCVInstrInfoXReviveVec.td.
+  if (Subtarget.hasVendorXReviveVec() || Subtarget.hasVendorXReviveW()) {
+   // XReviveW is the i256-only dedicated-register-file prototype; XReviveVec also
+   // covers i512/i1024 in RVV groups.
+   SmallVector<MVT, 3> ReviveWideVTs = {MVT::i256};
+   if (Subtarget.hasVendorXReviveVec()) {
+     ReviveWideVTs.push_back(MVT::i512);
+     ReviveWideVTs.push_back(MVT::i1024);
+   }
+   for (MVT WideVT : ReviveWideVTs) {
+    // One instruction each; see RISCVInstrInfoXReviveVec.td / RISCVInstrInfoXReviveW.td.
     setOperationAction({ISD::ADD, ISD::SUB, ISD::MUL, ISD::AND, ISD::OR,
                         ISD::XOR, ISD::SHL, ISD::SRL, ISD::SRA, ISD::UDIV,
                         ISD::SDIV, ISD::UREM, ISD::SREM, ISD::SETCC,
@@ -23654,6 +23664,7 @@ RISCVTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case RISCV::Select_VRM2_Using_CC_GPR:
   case RISCV::Select_VRM4_Using_CC_GPR:
   case RISCV::Select_VRM8_Using_CC_GPR:
+  case RISCV::Select_WR_Using_CC_GPR:
   case RISCV::Select_FPR64IN32X_Using_CC_GPR:
     return emitSelectPseudo(MI, BB, Subtarget);
   case RISCV::BuildPairF64Pseudo:

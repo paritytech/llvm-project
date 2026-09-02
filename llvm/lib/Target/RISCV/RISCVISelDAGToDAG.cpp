@@ -1042,6 +1042,13 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
           selectImm(CurDAG, DL, XLenVT,
                     IsSigned ? Value.getSExtValue() : Value.getZExtValue(),
                     *Subtarget);
+      // Prototype XReviveW: fixed width, so a plain widen with no vtype operands.
+      if (Subtarget->hasVendorXReviveW()) {
+        ReplaceNode(Node, CurDAG->getMachineNode(
+                              IsSigned ? RISCV::REVIVEW_SEXT : RISCV::REVIVEW_ZEXT,
+                              DL, MVT::i256, Materialised));
+        return;
+      }
       // The pseudo reads vtype for its width, so it carries the AVL and SEW
       // that name LMUL=2.
       SDValue Ops[] = {Materialised,

@@ -1164,6 +1164,17 @@ def HasVendorXReviveVec : Predicate<"Subtarget->hasVendorXReviveVec()">,
                           AssemblerPredicate<(all_of FeatureVendorXReviveVec),
                               "'XReviveVec' (revive 256-bit wide integer instructions)">;
 
+// Prototype: the same 256-bit machine type, but held in a dedicated 16-entry
+// register file (W0-W15) rather than reused RVV groups, and with no vtype -- the
+// width is fixed at 256 bits, so no vsetivli/set_width is emitted. Does NOT imply
+// the vector extensions. Mutually exclusive with XReviveVec at the codegen level.
+def FeatureVendorXReviveW
+    : RISCVExtension<1, 0,
+                     "revive 256-bit wide integers in a dedicated register file">;
+def HasVendorXReviveW : Predicate<"Subtarget->hasVendorXReviveW()">,
+                        AssemblerPredicate<(all_of FeatureVendorXReviveW),
+                            "'XReviveW' (revive 256-bit wide integers in a dedicated register file)">;
+
 def FeatureVendorXTHeadCondMov
     : RISCVExtension<1, 0,
                      "T-Head conditional move instructions">;
