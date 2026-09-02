@@ -52,6 +52,29 @@ define i256 @xor_i256(i256 %a, i256 %b) {
   ret i256 %r
 }
 
+; div/rem select to the wide instruction: setMaxDivRemBitWidthSupported keeps the
+; ExpandLargeDivRem IR pass from rewriting i256 division into a software limb loop.
+; CHECK-LABEL: udiv_i256:
+; CHECK:       revive.wdivu w0, w0, w1
+define i256 @udiv_i256(i256 %a, i256 %b) {
+  %r = udiv i256 %a, %b
+  ret i256 %r
+}
+
+; CHECK-LABEL: sdiv_i256:
+; CHECK:       revive.wdiv w0, w0, w1
+define i256 @sdiv_i256(i256 %a, i256 %b) {
+  %r = sdiv i256 %a, %b
+  ret i256 %r
+}
+
+; CHECK-LABEL: urem_i256:
+; CHECK:       revive.wremu w0, w0, w1
+define i256 @urem_i256(i256 %a, i256 %b) {
+  %r = urem i256 %a, %b
+  ret i256 %r
+}
+
 ; A wide comparison narrows to a GPR.
 ; CHECK-LABEL: ult_i256:
 ; CHECK:       revive.wsltu a0, w0, w1

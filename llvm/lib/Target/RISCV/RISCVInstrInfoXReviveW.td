@@ -102,12 +102,10 @@ def REVIVEW_ST : RVInstS<0b101, OPC_CUSTOM_2, (outs),
 let Predicates = [HasVendorXReviveW] in {
 defvar vt = i256;
 
-// One instruction per wide binop. KNOWN PROTOTYPE GAP: `udiv`/`sdiv`/`urem`/`srem`
-// still reach these patterns, but i256 division is expanded to a software
-// limb loop before instruction selection (the vector variant selects it to
-// `revive.wdiv`); a handful of constant-division corpus modules therefore fail to
-// link on this variant. Left in place because the encodings are correct and the
-// remaining ops (the overwhelming majority of the corpus) select fine.
+// One instruction per wide binop, div/rem included. div/rem require
+// setMaxDivRemBitWidthSupported to be raised to >= 256 (see RISCVISelLowering), or
+// the ExpandLargeDivRem IR pass rewrites i256 div/rem into a software limb loop
+// before these patterns ever run.
 foreach p = [["add", "ADD"], ["sub", "SUB"], ["mul", "MUL"], ["and", "AND"],
              ["or", "OR"], ["xor", "XOR"], ["udiv", "UDIV"], ["sdiv", "SDIV"],
              ["urem", "UREM"], ["srem", "SREM"], ["umin", "MINU"],

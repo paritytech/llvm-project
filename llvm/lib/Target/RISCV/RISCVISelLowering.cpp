@@ -1931,10 +1931,12 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   if (Subtarget.useRVVForFixedLengthVectors())
     setTargetDAGCombine(ISD::BITCAST);
 
-  // div/rem are one instruction at 256 bits, so ExpandIRInsts must not rewrite
-  // them into a libcall before the selector sees them.
+  // div/rem are one instruction at 256 bits, so ExpandLargeDivRem must not rewrite
+  // them into a software limb loop before the selector sees them.
   if (Subtarget.hasVendorXReviveVec())
     setMaxDivRemBitWidthSupported(1024);
+  else if (Subtarget.hasVendorXReviveW())
+    setMaxDivRemBitWidthSupported(256); // XReviveW is i256-only
   else
     setMaxDivRemBitWidthSupported(Subtarget.is64Bit() ? 128 : 64);
 
