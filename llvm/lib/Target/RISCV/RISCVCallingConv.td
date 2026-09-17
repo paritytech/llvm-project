@@ -15,6 +15,15 @@
 
 def CSR_ILP32E_LP64E : CalleeSavedRegs<(add X1, X8, X9)>;
 
+// As above, plus `vl` and `vtype`, for XReviveVec. A call's register mask is what
+// tells the vsetvli insertion that the configuration is gone, so preserving them
+// here is what stops it being re-established after every call. Used for the mask
+// only -- `getCalleeSavedRegs` still returns the list above, so neither gets a
+// frame slot; the callee keeps its promise by only ever setting the value the
+// caller already had.
+def CSR_ILP32E_LP64E_XReviveVec
+    : CalleeSavedRegs<(add CSR_ILP32E_LP64E, VL, VTYPE)>;
+
 def CSR_ILP32_LP64
     : CalleeSavedRegs<(add CSR_ILP32E_LP64E, (sequence "X%u", 18, 27))>;
 

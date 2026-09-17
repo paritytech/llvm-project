@@ -1753,6 +1753,19 @@ static bool hasRVVFrameObject(const MachineFunction &MF) {
   // D103622.
   //
   // Refer to https://github.com/llvm/llvm-project/issues/53016.
+  //
+  // XReviveVec never creates a scalable object, so the scan is stable for it and
+  // can be answered precisely. That avoids forcing 16-byte frame alignment, and
+  // with it realignment and a frame pointer, on every function.
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  if (MF.getSubtarget<RISCVSubtarget>().hasVendorXReviveVec()) {
+    for (int I = MFI.getObjectIndexBegin(), E = MFI.getObjectIndexEnd(); I != E;
+         ++I)
+      if (MFI.getStackID(I) == TargetStackID::ScalableVector)
+        return true;
+    return false;
+  }
+
   return MF.getSubtarget<RISCVSubtarget>().hasVInstructions();
 }
 

@@ -1,0 +1,103 @@
+# RUN: llvm-mc -triple=riscv64 -mattr=+xrevivevec -disassemble %s \
+# RUN:     | FileCheck %s
+# Not wrapped in `not`: decoding an unknown encoding is a warning, and llvm-mc
+# still exits zero, so requiring failure here would pass for the wrong reason.
+# RUN: llvm-mc -triple=riscv64 -disassemble %s 2>&1 \
+# RUN:     | FileCheck %s --check-prefix=NO-EXT
+
+# The decoder driven from raw bytes, so a change breaking only one direction of
+# the round trip is still caught.
+
+# CHECK: revive.wadd	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x00
+# CHECK: revive.wsub	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x02
+# CHECK: revive.wmul	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x04
+# CHECK: revive.wand	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x06
+# CHECK: revive.wor	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x08
+# CHECK: revive.wxor	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x0a
+# CHECK: revive.wdivu	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x0c
+# CHECK: revive.wdiv	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x0e
+# CHECK: revive.wremu	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x10
+# CHECK: revive.wrem	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x12
+# CHECK: revive.wexp	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x14
+# CHECK: revive.wsignextend	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x16
+# CHECK: revive.wminu	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x18
+# CHECK: revive.wmin	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x1a
+# CHECK: revive.wmaxu	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x1c
+# CHECK: revive.wmax	v8, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x04,0xc5,0x1e
+# CHECK: revive.wsll	v8, v10, a0
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x24,0xa5,0x00
+# CHECK: revive.wsrl	v8, v10, a0
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x24,0xa5,0x02
+# CHECK: revive.wsra	v8, v10, a0
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x24,0xa5,0x04
+# CHECK: revive.wseq	a0, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x15,0xc5,0x00
+# CHECK: revive.wsne	a0, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x15,0xc5,0x02
+# CHECK: revive.wsltu	a0, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x15,0xc5,0x04
+# CHECK: revive.wslt	a0, v10, v12
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x15,0xc5,0x06
+# CHECK: revive.wtrunc	a0, v10
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x65,0x05,0x02
+# CHECK: revive.wzext	v8, a0
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x74,0x05,0x00
+# CHECK: revive.wsext	v8, a0
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x74,0x05,0x02
+# CHECK: revive.wbswap	v8, v10
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x64,0x05,0x04
+# CHECK: revive.waddmod	v8, v10, v12, v14
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x34,0xc5,0x70
+# CHECK: revive.wmulmod	v8, v10, v12, v14
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x34,0xc5,0x72
+# CHECK: revive.wld	v8, 16(a0)
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x44,0x05,0x01
+# CHECK: revive.wst	v8, 16(a0)
+# NO-EXT: warning: invalid instruction encoding
+0x5b,0x58,0x85,0x00

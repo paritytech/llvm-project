@@ -1980,6 +1980,31 @@ let TargetPrefix = "riscv" in {
 
 // Vendor extensions
 //===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+// XReviveVec
+//===----------------------------------------------------------------------===//
+
+// EVM operations with no RISC-V equivalent, each replacing a hand-written
+// routine in stdlib.ll (__mulmod alone is 4,534 bytes).
+let TargetPrefix = "riscv" in {
+  def int_riscv_revive_addmod
+      : DefaultAttrsIntrinsic<[llvm_i256_ty],
+                              [llvm_i256_ty, llvm_i256_ty, llvm_i256_ty],
+                              [IntrNoMem, IntrSpeculatable]>;
+  def int_riscv_revive_mulmod
+      : DefaultAttrsIntrinsic<[llvm_i256_ty],
+                              [llvm_i256_ty, llvm_i256_ty, llvm_i256_ty],
+                              [IntrNoMem, IntrSpeculatable]>;
+  def int_riscv_revive_exp
+      : DefaultAttrsIntrinsic<[llvm_i256_ty],
+                              [llvm_i256_ty, llvm_i256_ty],
+                              [IntrNoMem, IntrSpeculatable]>;
+  def int_riscv_revive_signextend
+      : DefaultAttrsIntrinsic<[llvm_i256_ty],
+                              [llvm_i256_ty, llvm_i256_ty],
+                              [IntrNoMem, IntrSpeculatable]>;
+}
+
 include "llvm/IR/IntrinsicsRISCVXTHead.td"
 include "llvm/IR/IntrinsicsRISCVXsf.td"
 include "llvm/IR/IntrinsicsRISCVXCV.td"

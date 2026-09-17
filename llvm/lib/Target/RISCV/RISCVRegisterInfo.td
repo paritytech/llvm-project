@@ -802,19 +802,19 @@ def VR : VReg<!listconcat(VM1VTs, VMaskVTs),
 
 def VRNoV0 : VReg<!listconcat(VM1VTs, VMaskVTs), (sub VR, V0), 1>;
 
-def VRM2 : VReg<VM2VTs, (add (sequence "V%uM2", 8, 31, 2),
+def VRM2 : VReg<!listconcat(VM2VTs, [i256]), (add (sequence "V%uM2", 8, 31, 2),
                              (sequence "V%uM2", 6, 0, 2)), 2>;
 
-def VRM2NoV0 : VReg<VM2VTs, (sub VRM2, V0M2), 2>;
+def VRM2NoV0 : VReg<!listconcat(VM2VTs, [i256]), (sub VRM2, V0M2), 2>;
 
-def VRM4 : VReg<VM4VTs, (add V8M4, V12M4, V16M4, V20M4,
+def VRM4 : VReg<!listconcat(VM4VTs, [i512]), (add V8M4, V12M4, V16M4, V20M4,
                              V24M4, V28M4, V4M4, V0M4), 4>;
 
-def VRM4NoV0 : VReg<VM4VTs, (sub VRM4, V0M4), 4>;
+def VRM4NoV0 : VReg<!listconcat(VM4VTs, [i512]), (sub VRM4, V0M4), 4>;
 
-def VRM8 : VReg<VM8VTs, (add V8M8, V16M8, V24M8, V0M8), 8>;
+def VRM8 : VReg<!listconcat(VM8VTs, [i1024]), (add V8M8, V16M8, V24M8, V0M8), 8>;
 
-def VRM8NoV0 : VReg<VM8VTs, (sub VRM8, V0M8), 8>;
+def VRM8NoV0 : VReg<!listconcat(VM8VTs, [i1024]), (sub VRM8, V0M8), 8>;
 
 // Fractional LMUL register classes for inline assembly.
 // The ZZZ_ prefix is to make sure these are ordered after VR/VRNoV0 in the
@@ -893,6 +893,22 @@ def SF_VCIX_STATE : RISCVReg<0, "sf.vcix_state">;
 def : RISCVRegisterClass<[XLenVT], 32, (add SF_VCIX_STATE)> {
   let RegInfos = XLenRI;
   let isAllocatable = 0;
+}
+
+//===----------------------------------------------------------------------===//
+// XReviveW: a dedicated 16-entry 256-bit register file (prototype)
+//===----------------------------------------------------------------------===//
+// W0-W15 are their own physical registers, not reused RVV groups. Their 5-bit
+// encodings are the even values 0,2,...,30 so the custom-2 register fields decode
+// to exactly the wide-register indices the PolkaVM linker already expects from the
+// VRM2 groups -- no linker-side register change. 256-bit; spilled as a 32-byte slot.
+foreach Index = 0-15 in
+  def W#Index : RISCVReg<!mul(Index, 2), "w"#Index>;
+
+def WRRI : RegInfoByHwMode<[RV32, RV64],
+                           [RegInfo<256, 256, 64>, RegInfo<256, 256, 64>]>;
+def WR : RISCVRegisterClass<[i256], 64, (add (sequence "W%u", 0, 15))> {
+  let RegInfos = WRRI;
 }
 
 //===----------------------------------------------------------------------===//

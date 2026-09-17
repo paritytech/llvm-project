@@ -83,6 +83,7 @@ def i64     : VTInt<64>;  // 64-bit integer value
 def i128    : VTInt<128>; // 128-bit integer value
 def i256    : VTInt<256>; // 256-bit integer value
 def i512    : VTInt<512>; // 512-bit integer value
+def i1024   : VTInt<1024>; // 1024-bit integer value
 
 def bf16    : VTFP<16>;  // 16-bit brain floating point value
 def f16     : VTFP<16>;  // 16-bit floating point value

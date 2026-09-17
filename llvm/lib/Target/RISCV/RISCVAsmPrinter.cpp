@@ -1076,9 +1076,9 @@ bool RISCVAsmPrinter::lowerOperand(const MachineOperand &MO,
   return true;
 }
 
-static bool lowerRISCVVMachineInstrToMCInst(const MachineInstr *MI,
-                                            MCInst &OutMI,
-                                            const RISCVSubtarget *STI) {
+static bool lowerRISCVVMachineInstrToMCInst(
+    const MachineInstr *MI, MCInst &OutMI, const RISCVSubtarget *STI,
+    function_ref<bool(const MachineOperand &, MCOperand &)> LowerOperand) {
   const RISCVVPseudosTable::PseudoInfo *RVV =
       RISCVVPseudosTable::getPseudoInfo(MI->getOpcode());
   if (!RVV)
@@ -1134,7 +1134,11 @@ static bool lowerRISCVVMachineInstrToMCInst(const MachineInstr *MI,
     MCOperand MCOp;
     switch (MO.getType()) {
     default:
-      llvm_unreachable("Unknown operand type");
+      // A wide load or store carries a relocation on its offset, which no
+      // standard vector pseudo does; fall back to the ordinary lowering.
+      if (!LowerOperand(MO, MCOp))
+        return false;
+      break;
     case MachineOperand::MO_Register: {
       Register Reg = MO.getReg();
 
@@ -1190,7 +1194,10 @@ static bool lowerRISCVVMachineInstrToMCInst(const MachineInstr *MI,
 }
 
 void RISCVAsmPrinter::lowerToMCInst(const MachineInstr *MI, MCInst &OutMI) {
-  if (lowerRISCVVMachineInstrToMCInst(MI, OutMI, STI))
+  if (lowerRISCVVMachineInstrToMCInst(
+          MI, OutMI, STI, [this](const MachineOperand &MO, MCOperand &MCOp) {
+            return lowerOperand(MO, MCOp);
+          }))
     return;
 
   OutMI.setOpcode(MI->getOpcode());

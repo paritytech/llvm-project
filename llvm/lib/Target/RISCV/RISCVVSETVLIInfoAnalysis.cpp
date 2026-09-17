@@ -177,10 +177,11 @@ DemandedFields getDemanded(const MachineInstr &MI, const RISCVSubtarget *ST) {
   // Most instructions don't use any of these subfeilds.
   DemandedFields Res;
   // Start conservative if registers are used
-  if (MI.isCall() || MI.isInlineAsm() ||
+  bool CallClobbers = MI.isCall() && !ST->hasCallPreservedVType();
+  if (CallClobbers || MI.isInlineAsm() ||
       MI.readsRegister(RISCV::VL, /*TRI=*/nullptr))
     Res.demandVL();
-  if (MI.isCall() || MI.isInlineAsm() ||
+  if (CallClobbers || MI.isInlineAsm() ||
       MI.readsRegister(RISCV::VTYPE, /*TRI=*/nullptr))
     Res.demandVTYPE();
   // Start conservative on the unlowered form too
@@ -301,7 +302,7 @@ DemandedFields getDemanded(const MachineInstr &MI, const RISCVSubtarget *ST) {
   // However it does need valid SEW, i.e. vill must be cleared. The entry to a
   // function, calls and inline assembly may all set it, so make sure we clear
   // it for whole register copies. Do this by leaving VILL demanded.
-  if (RISCV::isVectorCopy(ST->getRegisterInfo(), MI)) {
+  if (!ST->hasVendorXReviveVec() && RISCV::isVectorCopy(ST->getRegisterInfo(), MI)) {
     Res.LMUL = DemandedFields::LMULNone;
     Res.SEW = DemandedFields::SEWNone;
     Res.SEWLMULRatio = false;
